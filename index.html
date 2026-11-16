@@ -1,0 +1,1524 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Bitácora</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Bitácora: control de horas, rentabilidad y cobros por cliente para autónomos.">
+<style>
+/* Layout: app de una columna centrada (máx. 760px) con barra de pestañas inferior en móvil y barra lateral en escritorio. Estética sobria tipo iOS: superficies planas, bordes finos, el color solo en los clientes. */
+:root{
+  --bg:#f4f4f6; --surface:#ffffff; --fg:#1c1c1f; --muted:#6c6c72; --faint:#a9a9b0;
+  --line:#dcdce1; --fill:#ebebef; --accent:#1c1c1f; --on-accent:#ffffff;
+  --good:#1d8348; --warn:#a85f00; --bad:#c4362b; --scrim:rgba(20,20,24,.38);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI Variable Display","Segoe UI",system-ui,Roboto,sans-serif;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --surface:#1c1c1e; --fg:#f2f2f5; --muted:#9a9aa1; --faint:#5f5f66;
+  --line:#353538; --fill:#2a2a2d; --accent:#f2f2f5; --on-accent:#000000;
+  --good:#3ccf6e; --warn:#ffb340; --bad:#ff6b61; --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000000; --surface:#1c1c1e; --fg:#f2f2f5; --muted:#9a9aa1; --faint:#5f5f66;
+  --line:#353538; --fill:#2a2a2d; --accent:#f2f2f5; --on-accent:#000000;
+  --good:#3ccf6e; --warn:#ffb340; --bad:#ff6b61; --scrim:rgba(0,0,0,.6); color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--font);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button{font:inherit;color:inherit}
+h1,h2,h3{margin:0;font-family:var(--font-display);text-wrap:balance}
+p{margin:0}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+.app{display:flex;min-height:100%}
+.side{display:none}
+main{flex:1;min-width:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px calc(92px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);
+  background:color-mix(in srgb,var(--surface) 90%,transparent);-webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px);
+  border-top:1px solid var(--line);
+  padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+.tab{appearance:none;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:11px;font-weight:500;color:var(--muted);cursor:pointer;border-radius:10px}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--fg)}
+.side .brand{font:700 20px/1 var(--font-display);padding:6px 12px 18px;letter-spacing:-.01em}
+.side .tab{flex-direction:row;gap:12px;font-size:15px;padding:10px 12px;justify-content:flex-start}
+.side .tab[aria-current="page"]{background:var(--fill)}
+.side .foot{margin-top:auto;padding:12px;font-size:12px;color:var(--muted)}
+@media (min-width:900px){
+  .tabbar{display:none}
+  .side{display:flex;flex-direction:column;gap:2px;width:228px;flex:none;position:sticky;top:0;height:100vh;padding:24px 12px;border-right:1px solid var(--line);background:var(--surface)}
+  main{padding-block:32px 56px}
+}
+
+/* cabecera */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.top h1{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.top .sub{color:var(--muted);font-size:14px;margin-top:2px}
+.top-actions{display:flex;gap:8px;align-items:center}
+.iconbtn{appearance:none;border:1px solid var(--line);background:var(--surface);width:38px;height:38px;border-radius:999px;display:grid;place-items:center;cursor:pointer;color:var(--fg)}
+.iconbtn svg{width:19px;height:19px}
+.streak{font-size:13px;font-weight:600;padding:7px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);white-space:nowrap}
+
+/* elementos base */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.sec-h h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;font-family:var(--font)}
+.sec-h .aside{font-size:13px;color:var(--muted)}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.btn.ghost{border-color:transparent;background:transparent;padding-inline:8px}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:6px 12px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer;color:var(--fg);display:inline-flex;align-items:center;gap:6px}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chip .x{opacity:.6;font-size:15px;line-height:1}
+.pill{font-size:12px;font-weight:600;border-radius:999px;padding:2px 8px;background:var(--fill);color:var(--muted);white-space:nowrap}
+.pill.bad{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.pill.good{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+
+input,select,textarea{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:72px}
+.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);font-weight:500;min-width:0}
+.f > span{display:flex;justify-content:space-between;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.seg{display:inline-flex;background:var(--fill);border-radius:10px;padding:2px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:8px;font-size:14px;cursor:pointer;color:var(--fg)}
+.seg button[aria-pressed="true"]{background:var(--surface);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.14)}
+
+/* listas tipo Ajustes */
+.list{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--line);min-width:0}
+.row:first-child{border-top:0}
+button.row{appearance:none;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;text-align:left;cursor:pointer}
+.list > button.row:first-child{border-top:0}
+.row .main{flex:1;min-width:0}
+.row .t1{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .t2{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .end{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.em{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 18%,var(--surface));font-size:19px;flex:none}
+.empty{color:var(--muted);font-size:14px;padding:16px;text-align:center}
+
+/* objetivo semanal */
+.goal{display:flex;flex-direction:column;gap:10px}
+.goal .big{font:600 28px/1.1 var(--font-display);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.goal .big small{font-size:15px;font-weight:500;color:var(--muted);margin-left:4px}
+.meter{height:8px;border-radius:999px;background:var(--fill);overflow:hidden}
+.meter > i{display:block;height:100%;border-radius:999px;background:var(--fg);transition:width .4s ease}
+.meter.done > i{background:var(--good)}
+
+/* avisos */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--line)}
+.alert .e{font-size:18px;line-height:1.3}
+.alert .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.alert.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+
+/* cronómetro */
+.timer{border-radius:20px;padding:18px 18px 16px;border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:14px}
+.timer.on{background:color-mix(in srgb,var(--c) 11%,var(--surface));border-color:color-mix(in srgb,var(--c) 40%,var(--line))}
+.timer .who{display:flex;align-items:center;gap:10px;min-width:0}
+.timer .who .nm{font-weight:600;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clock{font:600 clamp(52px,15vw,76px)/1 var(--font-display);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.timer.paused .clock{color:var(--muted)}
+.timer.idle{align-items:flex-start}
+.timer.idle .clock{color:var(--faint)}
+.timer .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+.timer.pop{animation:pop .38s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes pop{from{transform:scale(.975);opacity:.55}to{transform:none;opacity:1}}
+
+/* botones de cliente */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:10px}
+.cbtn{appearance:none;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);text-align:left;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;min-height:62px;min-width:0;position:relative}
+.cbtn .txt{min-width:0;display:flex;flex-direction:column}
+.cbtn .nm{font-weight:600;font-size:14px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cbtn .t{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cbtn.on{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+.cbtn.add{justify-content:center;color:var(--muted);border-style:dashed;background:transparent}
+.cbtn kbd{position:absolute;top:6px;right:8px;font:11px var(--font);color:var(--faint);display:none}
+@media (hover:hover) and (min-width:900px){.cbtn kbd{display:block}}
+.cbtn.flash{animation:flash .5s ease}
+@keyframes flash{50%{background:color-mix(in srgb,var(--c) 22%,var(--surface))}}
+
+/* barra mini del cronómetro en otras pestañas */
+.mini{position:sticky;top:env(safe-area-inset-top,0px);z-index:15;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);background:color-mix(in srgb,var(--c) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--c) 40%,var(--line))}
+.mini .nm{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* informes */
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:640px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.kpi{display:flex;flex-direction:column;gap:4px}
+.kpi .l{font-size:12px;color:var(--muted);font-weight:500}
+.kpi .v{font:600 22px/1.15 var(--font-display);font-variant-numeric:tabular-nums;letter-spacing:-.01em;overflow-wrap:anywhere}
+.delta{font-size:12px;font-weight:600;color:var(--muted)}
+.delta.up{color:var(--good)} .delta.down{color:var(--bad)}
+.bars{display:flex;flex-direction:column;gap:12px}
+.brow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;align-items:baseline}
+.brow .lb{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;font-weight:500}
+.brow .lb span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .vl{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.brow .vl b{color:var(--fg);font-weight:600}
+.bar{grid-column:1/-1;height:8px;border-radius:999px;background:var(--fill);overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:999px;background:var(--c,var(--fg))}
+.tbl-wrap{overflow-x:auto}
+table.rank{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+table.rank th{font-size:12px;font-weight:600;color:var(--muted);text-align:right;padding:0 8px 8px;white-space:nowrap}
+table.rank th:first-child,table.rank td:first-child{text-align:left;padding-left:0}
+table.rank td{padding:10px 8px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+table.rank td:first-child{white-space:normal;min-width:140px}
+table.rank .cn{display:flex;align-items:center;gap:8px;font-weight:600}
+table.rank .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font:11px var(--font)}
+.heat-wrap{overflow-x:auto}
+.heat{display:grid;grid-template-rows:repeat(7,14px);grid-auto-flow:column;grid-auto-columns:14px;gap:3px}
+.heat i{border-radius:3px;background:var(--fill)}
+.heat i.l1{background:color-mix(in srgb,var(--fg) 22%,var(--fill))}
+.heat i.l2{background:color-mix(in srgb,var(--fg) 45%,var(--fill))}
+.heat i.l3{background:color-mix(in srgb,var(--fg) 68%,var(--fill))}
+.heat i.l4{background:var(--fg)}
+.heat i.hol{background:transparent;border:1px dashed var(--line)}
+.heat i.out{background:transparent}
+.legend{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--muted)}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.period{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.period .nav{display:flex;align-items:center;gap:6px}
+.period .lbl{font-weight:600;min-width:0;text-align:center;font-variant-numeric:tabular-nums}
+.ai-out{white-space:normal;font-size:15px;line-height:1.55;display:flex;flex-direction:column;gap:8px}
+.ai-out ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+
+/* hojas */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:92%;overflow:auto;border-radius:20px 20px 0 0;display:flex;flex-direction:column;gap:18px;
+  padding:18px max(18px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));animation:up .24s ease}
+@keyframes up{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+@media (min-width:700px){.scrim{align-items:center;padding:24px}.sheet{border-radius:20px;padding:22px 24px}}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sheet-h h3{font-size:19px;font-weight:700}
+.sheet .fields{display:flex;flex-direction:column;gap:16px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:30px;height:30px;border-radius:50%;background:var(--c);border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer;appearance:none}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--fg)}
+.inline{display:flex;gap:8px;align-items:center}
+.inline input{flex:1}
+.check{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:15px;color:var(--fg);font-weight:500}
+.switch{appearance:none;width:46px;height:28px;border-radius:999px;background:var(--fill);border:1px solid var(--line);position:relative;cursor:pointer;flex:none;padding:0}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .18s ease}
+.switch:checked{background:var(--good);border-color:var(--good)}
+.switch:checked::after{left:20px}
+
+/* aviso flotante */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--fg);color:var(--bg);border-radius:999px;padding:10px 10px 10px 18px;display:flex;gap:10px;align-items:center;max-width:calc(100% - 32px);font-size:14px;font-weight:500;box-shadow:0 6px 24px rgba(0,0,0,.18);animation:up .2s ease}
+.toast .btn{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 35%,transparent);padding:5px 12px}
+@media (min-width:900px){.toast{bottom:28px}}
+.hint{font-size:12px;color:var(--muted);text-align:center}
+.demo{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:14px;padding:10px 14px;border-radius:var(--radius);border:1px dashed var(--line)}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="app">
+  <nav class="side" aria-label="Secciones">
+    <div class="brand">Bitácora</div>
+    <div id="sidetabs"></div>
+    <div class="foot" id="sidefoot"></div>
+  </nav>
+  <main><div class="wrap" id="view"></div></main>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Secciones"></nav>
+<div id="sheet"></div>
+<div id="toast" aria-live="polite"></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+(() => {
+"use strict";
+
+/* ============ utilidades ============ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-5);
+const pad = n => String(n).padStart(2, "0");
+const dkey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseD = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; };
+const startOfWeek = d => addDays(d, -((d.getDay() + 6) % 7));
+const daysInMonth = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+const todayKey = () => dkey(new Date());
+const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
+const num = v => { if (v === "" || v == null) return null; const n = parseFloat(String(v).replace(",", ".")); return Number.isFinite(n) ? n : null; };
+const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+const fDay = new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" });
+const fShort = new Intl.DateTimeFormat("es-ES", { weekday: "short", day: "numeric" });
+const fDM = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short" });
+const fMonth = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+let eurFmt0, eurFmt2;
+try {
+  eurFmt0 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0, useGrouping: "always" });
+  eurFmt2 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always" });
+} catch { eurFmt0 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }); eurFmt2 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }); }
+const eur = (n, dec) => S.hide ? "•••• €" : (dec || (Math.abs(n) < 100 && n % 1 !== 0) ? eurFmt2 : eurFmt0).format(n || 0);
+const eurH = n => S.hide ? "•• €/h" : (n == null ? "—" : `${Math.round(n)} €/h`);
+function dur(mins) {
+  mins = Math.max(0, Math.round(mins || 0));
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+const durShort = dur;
+function clockStr(ms) { const s = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return `${h}:${pad(m)}:${pad(x)}`; }
+
+const COLORS = ["#0a84ff", "#ff9f0a", "#2fb457", "#ff375f", "#af52de", "#32ade6", "#e6b400", "#a2845e", "#ff6b3d", "#5e5ce6", "#00b8a9", "#8e8e93"];
+const EMOJIS = ["📷", "🎬", "✂️", "🏠", "🍰", "🚗", "💼", "🎨", "📱", "⭐", "☕", "🛍️", "🎤", "🌿", "🏋️", "🍷"];
+
+/* ============ estado ============ */
+const DEFAULTS = () => ({
+  v: 1, createdAt: Date.now(),
+  clients: [],
+  tasks: ["Guion", "Grabación", "Sesión de fotos", "Edición", "Retoque", "Reunión", "Desplazamiento", "Publicación", "Comunidad", "Administración"],
+  lines: ["Fotografía", "Vídeo", "Redes sociales", "Diseño", "Otros"],
+  goals: { weekHours: 25, monthIncome: 0 },
+  minRate: 25, kmRate: 0.26, dailyLimit: 9, forgotHours: 2,
+  pomodoro: false, pomoWork: 25, pomoBreak: 5, sound: true,
+  workDays: [1, 2, 3, 4, 5],
+  holidays: [], calSeen: [], billing: {}
+});
+const S = {
+  settings: DEFAULTS(), timer: null, entries: {},
+  mode: "connecting", cloudNote: "", hide: false,
+  caps: { db: null, sample: null, mcp: null, downloads: null },
+  view: "hoy", tick: 0,
+  report: { mode: "week", anchor: new Date(), from: null, to: null },
+  ai: { q: "", text: "", busy: false, err: "" },
+  cal: { busy: false, list: null, err: "" },
+  dismissed: {}
+};
+try { S.hide = localStorage.getItem("bitacora:hide") === "1"; } catch {}
+
+function mergeSettings(raw) {
+  const d = DEFAULTS();
+  if (!raw) return d;
+  const s = Object.assign(d, raw);
+  s.goals = Object.assign(DEFAULTS().goals, raw.goals || {});
+  for (const k of ["clients", "tasks", "lines", "holidays", "calSeen", "workDays"]) if (!Array.isArray(s[k])) s[k] = DEFAULTS()[k];
+  if (!s.workDays.length) s.workDays = DEFAULTS().workDays;
+  if (!s.billing || typeof s.billing !== "object") s.billing = {};
+  return s;
+}
+const clientsById = () => Object.fromEntries(S.settings.clients.map(c => [c.id, c]));
+const activeClients = () => S.settings.clients.filter(c => !c.archived)
+  .sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0) || a.name.localeCompare(b.name, "es"));
+const entriesList = () => Object.values(S.entries);
+const timeEntries = () => entriesList().filter(e => (e.kind || "time") === "time");
+
+/* ============ almacenamiento ============ */
+const LS = "bitacora:v1";
+const Local = {
+  load() { try { const r = localStorage.getItem(LS); return r ? JSON.parse(r) : null; } catch { return null; } },
+  persist() { try { localStorage.setItem(LS, JSON.stringify({ mode: S.mode === "cloud" ? "cloud" : "local", settings: S.settings, timer: S.timer, entries: S.entries })); } catch {} }
+};
+const chains = {};
+function serial(key, fn) {
+  chains[key] = (chains[key] || Promise.resolve()).then(fn).catch(err => onWriteError(err));
+  return chains[key];
+}
+function onWriteError(err) {
+  const code = err && err.code;
+  if (code === "invalid_argument" || code === "not_granted" || code === "revoked") {
+    if (S.mode === "cloud") {
+      S.mode = "local"; S.cloudNote = "No tienes permiso para guardar en la nube de esta página. Tus datos se guardan solo en este navegador.";
+      Local.persist(); render();
+    }
+  } else if (code === "quota_exceeded") {
+    toast("La base de datos está llena. Descarga una copia y borra registros antiguos.");
+  } else if (code) {
+    toast("No se pudo guardar. Revisa la conexión y vuelve a intentarlo.");
+  }
+}
+const Cloud = {
+  refs: null, dirtySettings: false, seq: 0, dirtyTimer: 0, settingsTimer: null,
+  init(db, id) {
+    const root = `data/users/${id}`;
+    this.refs = { settings: db.doc(`${root}/settings`), timer: db.doc(`${root}/timer`), entries: db.doc(`${root}/main`).collection("entries") };
+    const cache = Local.load();
+    let gotSettings = false, gotEntries = false;
+    const loading = setTimeout(() => { if (!gotSettings || !gotEntries) { S.cloudNote = "No se puede conectar con la nube. Estás viendo lo último guardado en este dispositivo."; render(); } }, 10000);
+    const done = () => { if (gotSettings && gotEntries) { clearTimeout(loading); if (S.cloudNote.startsWith("No se puede conectar")) S.cloudNote = ""; } };
+    this.refs.settings.onSnapshot(snap => {
+      if (!snap.metadata.fromCache) gotSettings = true;
+      if (this.dirtySettings) return;
+      if (snap.exists) S.settings = mergeSettings(clone(snap.data()));
+      else if (!snap.metadata.fromCache && cache && cache.mode === "local" && cache.settings && cache.settings.clients && cache.settings.clients.length) {
+        this.migrate(cache);
+      }
+      done(); Local.persist(); render();
+    }, e => { clearTimeout(loading); onWriteError(e); });
+    this.refs.timer.onSnapshot(snap => {
+      if (this.dirtyTimer) return;
+      const d = snap.exists ? clone(snap.data()) : null;
+      S.timer = d && d.clientId ? d : null;
+      Local.persist(); render();
+    }, e => onWriteError(e));
+    this.refs.entries.onSnapshot(qs => {
+      if (!qs.metadata.fromCache) gotEntries = true;
+      const next = {};
+      qs.docs.forEach(d => { next[d.id] = clone(d.data()); });
+      S.entries = next; done(); Local.persist(); render();
+    }, e => { clearTimeout(loading); onWriteError(e); });
+  },
+  async migrate(cache) {
+    S.settings = mergeSettings(clone(cache.settings));
+    S.entries = clone(cache.entries || {});
+    S.timer = cache.timer || null;
+    Store.saveSettings(true);
+    if (S.timer) Store.saveTimer();
+    for (const e of Object.values(S.entries)) await Store.putEntry(e);
+    toast("Tus datos de este navegador se han pasado a la nube.");
+  }
+};
+const Store = {
+  saveSettings(now) {
+    if (S.mode !== "cloud") { Local.persist(); return; }
+    Local.persist();
+    Cloud.dirtySettings = true; const seq = ++Cloud.seq;
+    clearTimeout(Cloud.settingsTimer); Cloud.settingsTimer = null;
+    const write = () => {
+      Cloud.settingsTimer = null;
+      return serial("settings", () => Cloud.refs.settings.set(clone(S.settings)))
+        .finally(() => { if (Cloud.seq === seq && !Cloud.settingsTimer) Cloud.dirtySettings = false; });
+    };
+    if (now) write(); else Cloud.settingsTimer = setTimeout(write, 450);
+  },
+  saveTimer() {
+    Local.persist();
+    if (S.mode !== "cloud") return;
+    Cloud.dirtyTimer++;
+    const body = S.timer ? clone(S.timer) : { clientId: null };
+    return serial("timer", () => Cloud.refs.timer.set(body)).finally(() => { Cloud.dirtyTimer--; });
+  },
+  putEntry(e) {
+    S.entries[e.id] = e; Local.persist();
+    if (S.mode !== "cloud") return Promise.resolve();
+    return serial("e:" + e.id, () => Cloud.refs.entries.doc(e.id).set(clone(e)));
+  },
+  delEntry(id) {
+    delete S.entries[id]; Local.persist();
+    if (S.mode !== "cloud") return Promise.resolve();
+    return serial("e:" + id, () => Cloud.refs.entries.doc(id).delete());
+  }
+};
+
+/* ============ cálculos ============ */
+function activeMs(t, now = Date.now()) { return t ? Math.max(0, (t.pausedAt || now) - t.startedAt - (t.pausedMs || 0)) : 0; }
+function minsOnDay(key) { return timeEntries().filter(e => e.date === key).reduce((a, e) => a + e.mins, 0); }
+function isHoliday(key) { return S.settings.holidays.includes(key); }
+const isWorkDay = key => S.settings.workDays.includes(parseD(key).getDay());
+const isOff = key => isHoliday(key) || !isWorkDay(key);
+const WD = [[1, "L", "lunes"], [2, "M", "martes"], [3, "X", "miércoles"], [4, "J", "jueves"], [5, "V", "viernes"], [6, "S", "sábado"], [0, "D", "domingo"]];
+function firstDayKey() {
+  const ks = timeEntries().map(e => e.date).sort();
+  const created = dkey(new Date(S.settings.createdAt || Date.now()));
+  return ks[0] && ks[0] < created ? ks[0] : created;
+}
+function streak() {
+  const days = new Set(entriesList().map(e => e.date));
+  let d = new Date(), n = 0;
+  if (!days.has(dkey(d))) d = addDays(d, -1);
+  const first = firstDayKey();
+  for (let i = 0; i < 400; i++) {
+    const k = dkey(d);
+    if (k < first) break;
+    if (days.has(k)) n++;
+    else if (!isOff(k)) break;
+    d = addDays(d, -1);
+  }
+  return n;
+}
+function gaps() {
+  const days = new Set(timeEntries().map(e => e.date));
+  const first = firstDayKey(); const out = [];
+  for (let i = 7; i >= 1; i--) { const k = dkey(addDays(new Date(), -i)); if (k >= first && !days.has(k) && !isOff(k)) out.push(k); }
+  return out;
+}
+function allMinsFor(id) { return timeEntries().filter(e => e.clientId === id).reduce((a, e) => a + e.mins, 0); }
+function rateFor(c, task) { const r = c.taskRates && task != null ? num(c.taskRates[task]) : null; return r != null ? r : num(c.rate); }
+function needsRate(c) {
+  if (c.kind !== "paid" || c.archived) return false;
+  if (c.billing === "hourly") return num(c.rate) == null;
+  if (c.billing === "retainer") return num(c.fee) == null;
+  if (c.billing === "piece") return !(c.pieces || []).some(p => num(p.price) != null);
+  if (c.billing === "fixed") return num(c.total) == null;
+  return true;
+}
+
+function calc(f, t) {
+  const cl = clientsById(), st = S.settings;
+  const per = {}, tasks = {}, lines = {}, days = {};
+  const P = id => per[id] || (per[id] = { id, mins: 0, bill: 0, rev: 0, km: 0, exp: 0, pieces: 0, noRate: false });
+  for (const e of entriesList()) {
+    if (e.date < f || e.date > t) continue;
+    const c = cl[e.clientId]; if (!c) continue;
+    const p = P(c.id), kind = e.kind || "time";
+    if (kind === "piece") { if (c.kind === "paid") p.rev += (e.qty || 0) * (e.price || 0); p.pieces += e.qty || 0; continue; }
+    if (kind === "expense") { p.exp += e.amount || 0; continue; }
+    p.mins += e.mins; if (e.billable) p.bill += e.mins; p.km += e.km || 0;
+    days[e.date] = (days[e.date] || 0) + e.mins;
+    const tk = e.task || "Sin tipo"; tasks[tk] = (tasks[tk] || 0) + e.mins;
+    if (c.kind === "paid" && c.billing === "hourly" && e.billable) { const r = rateFor(c, e.task); if (r == null) p.noRate = true; else p.rev += e.mins / 60 * r; }
+  }
+  for (const c of st.clients) {
+    if (c.kind !== "paid") continue;
+    if (c.billing === "retainer" && !c.archived) {
+      const fee = num(c.fee); const from = dkey(new Date(c.createdAt || 0));
+      if (fee == null) { if (per[c.id]) per[c.id].noRate = true; continue; }
+      let v = 0;
+      for (let d = parseD(f); dkey(d) <= t; d = addDays(d, 1)) { if (dkey(d) >= from) v += fee / daysInMonth(d); }
+      if (v > 0) P(c.id).rev += v;
+    }
+    if (c.billing === "fixed" && per[c.id] && per[c.id].mins) {
+      const tot = num(c.total); if (tot == null) { per[c.id].noRate = true; continue; }
+      const all = allMinsFor(c.id); per[c.id].rev += all ? tot * per[c.id].mins / all : 0;
+    }
+  }
+  const T = { mins: 0, bill: 0, paidMins: 0, rev: 0, cost: 0 };
+  const rows = [];
+  for (const p of Object.values(per)) {
+    const c = cl[p.id];
+    p.cost = p.km * (num(st.kmRate) || 0) + p.exp;
+    p.net = p.rev - p.cost;
+    p.eurH = c.kind === "paid" && p.mins > 0 ? p.net / (p.mins / 60) : null;
+    T.mins += p.mins; T.bill += p.bill; T.rev += p.rev; T.cost += p.cost;
+    if (c.kind === "paid") T.paidMins += p.mins;
+    const ln = c.kind === "internal" ? "Interno" : (c.line || "Sin línea");
+    const L = lines[ln] || (lines[ln] = { mins: 0, rev: 0 }); L.mins += p.mins; L.rev += p.rev;
+    rows.push(p);
+  }
+  const minRate = num(st.minRate) || 0;
+  for (const p of rows) {
+    const c = cl[p.id];
+    p.share = T.paidMins ? p.mins / T.paidMins : 0;
+    p.vampire = c.kind === "paid" && p.eurH != null && p.eurH < minRate && p.share >= 0.15 && p.mins >= 60;
+    p.low = c.kind === "paid" && p.eurH != null && p.eurH < minRate && !p.vampire;
+  }
+  T.net = T.rev - T.cost;
+  T.eurH = T.paidMins ? T.net / (T.paidMins / 60) : null;
+  return { per, rows, tasks, lines, days, T };
+}
+
+function periodBounds(r = S.report) {
+  const a = r.anchor;
+  if (r.mode === "week") { const s = startOfWeek(a); return [dkey(s), dkey(addDays(s, 6))]; }
+  if (r.mode === "month") { const s = new Date(a.getFullYear(), a.getMonth(), 1); return [dkey(s), dkey(new Date(a.getFullYear(), a.getMonth() + 1, 0))]; }
+  const f = r.from || dkey(addDays(new Date(), -29)), t = r.to || todayKey();
+  return f <= t ? [f, t] : [t, f];
+}
+function prevBounds(f, t) {
+  if (S.report.mode === "month") { const a = parseD(f); const p = new Date(a.getFullYear(), a.getMonth() - 1, 1); return [dkey(p), dkey(new Date(p.getFullYear(), p.getMonth() + 1, 0))]; }
+  const len = Math.round((parseD(t) - parseD(f)) / 864e5) + 1;
+  return [dkey(addDays(parseD(f), -len)), dkey(addDays(parseD(f), -1))];
+}
+function periodLabel(f, t) {
+  if (S.report.mode === "month") return cap(fMonth.format(parseD(f)));
+  const a = parseD(f), b = parseD(t);
+  return `${fDM.format(a)} – ${fDM.format(b)}${b.getFullYear() !== new Date().getFullYear() ? " " + b.getFullYear() : ""}`;
+}
+
+/* ============ sonido ============ */
+let actx = null;
+function sound(kind) {
+  if (!S.settings.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const notes = kind === "start" ? [660, 990] : kind === "stop" ? [880, 520] : [740, 740, 740];
+    notes.forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + i * 0.09;
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.12, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + 0.14);
+    });
+  } catch {}
+}
+
+/* ============ acciones del cronómetro ============ */
+function touchClient(id) { const c = clientsById()[id]; if (c) { c.lastUsed = Date.now(); Store.saveSettings(); } }
+async function startClient(id) {
+  const c = clientsById()[id]; if (!c) return;
+  if (S.timer) {
+    if (S.timer.clientId === id) { if (S.timer.pausedAt) resumeTimer(); return; }
+    const prev = clientsById()[S.timer.clientId];
+    const e = stopCore();
+    if (e) toast(`Guardado ${dur(e.mins)} en ${prev ? prev.name : "el cliente anterior"}`, "Editar", () => openEntrySheet({ id: e.id }));
+  }
+  const now = Date.now();
+  S.timer = { clientId: id, task: null, note: "", startedAt: now, pausedAt: null, pausedMs: 0, pomoAnchor: 0, breakUntil: null, ackAt: null };
+  c.lastUsed = now; Store.saveSettings(); Store.saveTimer();
+  sound("start"); render();
+  const t = $(".timer"); if (t) { t.classList.remove("pop"); void t.offsetWidth; t.classList.add("pop"); }
+}
+function stopCore(endAt) {
+  const t = S.timer; if (!t) return null;
+  const end = endAt || Date.now();
+  const ms = Math.max(0, (t.pausedAt && (!endAt || endAt > t.pausedAt) ? t.pausedAt : end) - t.startedAt - (t.pausedMs || 0));
+  S.timer = null; Store.saveTimer();
+  const mins = Math.round(ms / 600) / 100;
+  if (mins < 1) { toast("Menos de un minuto: no se ha guardado."); return null; }
+  const c = clientsById()[t.clientId];
+  const e = { id: uid(), kind: "time", clientId: t.clientId, date: dkey(new Date(t.startedAt)), start: t.startedAt, mins, task: t.task || null, note: t.note || "", km: 0, billable: !!c && c.kind === "paid", src: "timer", ts: Date.now() };
+  Store.putEntry(e);
+  return e;
+}
+function stopTimer(endAt) {
+  const e = stopCore(endAt); sound("stop"); render();
+  if (e) openStopSheet(e.id);
+}
+function pauseTimer() { if (!S.timer || S.timer.pausedAt) return; S.timer.pausedAt = Date.now(); Store.saveTimer(); render(); }
+function resumeTimer() {
+  const t = S.timer; if (!t || !t.pausedAt) return;
+  t.pausedMs = (t.pausedMs || 0) + (Date.now() - t.pausedAt); t.pausedAt = null; t.breakUntil = null;
+  t.pomoAnchor = activeMs(t); Store.saveTimer(); sound("start"); render();
+}
+function add15(id) {
+  const c = clientsById()[id]; if (!c) return;
+  const e = { id: uid(), kind: "time", clientId: id, date: todayKey(), start: Date.now(), mins: 15, task: null, note: "", km: 0, billable: c.kind === "paid", src: "quick", ts: Date.now() };
+  Store.putEntry(e); touchClient(id); render();
+  const b = $(`.cbtn[data-id="${id}"]`); if (b) { b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash"); }
+  if (navigator.vibrate) try { navigator.vibrate(12); } catch {}
+  toast(`+15 min a ${c.name}`, "Deshacer", () => { Store.delEntry(e.id); render(); });
+}
+
+/* ============ avisos flotantes ============ */
+let toastT = null;
+function toast(msg, actLabel, act) {
+  const el = $("#toast"); clearTimeout(toastT);
+  el.innerHTML = `<div class="toast" role="status"><span>${esc(msg)}</span>${actLabel ? `<button class="btn sm" id="toastAct">${esc(actLabel)}</button>` : ""}</div>`;
+  if (actLabel) $("#toastAct").onclick = () => { el.innerHTML = ""; act(); };
+  toastT = setTimeout(() => { el.innerHTML = ""; }, actLabel ? 6000 : 3500);
+}
+
+/* ============ iconos ============ */
+const IC = {
+  hoy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg>',
+  informes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>',
+  clientes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18 14.8c1.9.7 3.1 2.5 3.5 5.2"/></svg>',
+  ajustes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 5.1A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.3 4.1M6.6 6.6A16.6 16.6 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+  prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>'
+};
+const VIEWS = [["hoy", "Hoy"], ["informes", "Informes"], ["clientes", "Clientes"], ["ajustes", "Ajustes"]];
+
+/* ============ render principal ============ */
+function render() {
+  const tabs = VIEWS.map(([k, l]) => `<button class="tab" data-act="nav" data-v="${k}" ${S.view === k ? 'aria-current="page"' : ""}>${IC[k]}<span>${l}</span></button>`).join("");
+  $("#tabbar").innerHTML = tabs; $("#sidetabs").innerHTML = tabs;
+  $("#sidefoot").textContent = S.mode === "cloud" ? "Sincronizado en la nube" : S.mode === "local" ? "Guardado en este navegador" : "Conectando…";
+  const v = $("#view");
+  const scroll = window.scrollY;
+  const focusId = document.activeElement && document.activeElement.id && v.contains(document.activeElement) ? document.activeElement.id : null;
+  v.innerHTML = (S.view !== "hoy" ? miniTimer() : "") + ({ hoy: viewHoy, informes: viewInformes, clientes: viewClientes, ajustes: viewAjustes }[S.view])();
+  if (focusId) { const f = document.getElementById(focusId); if (f) { f.focus(); try { const L = f.value.length; f.setSelectionRange(L, L); } catch {} } }
+  window.scrollTo(0, scroll);
+  tick(true);
+}
+
+function miniTimer() {
+  const t = S.timer; if (!t) return "";
+  const c = clientsById()[t.clientId]; if (!c) return "";
+  return `<div class="mini" style="--c:${c.color}"><span class="em" style="width:28px;height:28px;font-size:15px">${esc(c.emoji)}</span>
+    <span class="nm">${esc(c.name)}</span><span class="num" data-clock style="font-weight:600">${clockStr(activeMs(t))}</span>
+    <button class="btn sm primary" data-act="stop">Parar</button></div>`;
+}
+
+/* ---------- HOY ---------- */
+function viewHoy() {
+  const st = S.settings, cl = clientsById(), now = new Date();
+  const wk = startOfWeek(now), wkF = dkey(wk), wkT = dkey(addDays(wk, 6));
+  const billWeek = timeEntries().filter(e => e.billable && e.date >= wkF && e.date <= wkT).reduce((a, e) => a + e.mins, 0);
+  const goal = (num(st.goals.weekHours) || 0) * 60;
+  const pct = goal ? clamp(billWeek / goal * 100, 0, 100) : 0;
+  const sk = streak();
+  let h = `<header class="top"><div><h1>Hoy</h1><p class="sub">${cap(fDay.format(now))}</p></div>
+    <div class="top-actions">${sk > 0 ? `<span class="streak" title="Días seguidos apuntando">🔥 ${sk} ${sk === 1 ? "día" : "días"}</span>` : ""}
+    <button class="iconbtn" data-act="eye" aria-label="${S.hide ? "Mostrar cifras de dinero" : "Ocultar cifras de dinero"}">${S.hide ? IC.eyeOff : IC.eye}</button></div></header>`;
+
+  if (!st.clients.length) return h + onboarding();
+
+  h += `<section class="card goal"><div class="sec-h"><h2>Facturable esta semana</h2><span class="aside">${goal ? `objetivo ${dur(goal)}` : ""}</span></div>
+    <div class="big" data-weekbill="${billWeek}">${durShort(billWeek)}${goal ? `<small>de ${durShort(goal)}</small>` : ""}</div>
+    ${goal ? `<div class="meter ${billWeek >= goal ? "done" : ""}"><i style="width:${pct}%"></i></div>` : ""}</section>`;
+
+  h += alertsHtml();
+
+  const t = S.timer, tc = t && cl[t.clientId];
+  if (t && tc) {
+    const paused = !!t.pausedAt;
+    h += `<section class="timer on ${paused ? "paused" : ""}" style="--c:${tc.color}" aria-live="off">
+      <div class="who"><span class="em">${esc(tc.emoji)}</span><span class="nm">${esc(tc.name)}</span></div>
+      <div class="clock" data-clock>${clockStr(activeMs(t))}</div>
+      <div class="meta"><button class="chip" data-act="pickTask">${t.task ? esc(t.task) : "Elegir tarea"} ▾</button>
+        <span data-pomo></span>${paused && !t.breakUntil ? "<span>En pausa</span>" : ""}</div>
+      <div class="btns">${paused ? `<button class="btn" data-act="resume">Reanudar</button>` : `<button class="btn" data-act="pause">Pausa</button>`}
+        <button class="btn primary" data-act="stop">Parar y guardar</button></div></section>`;
+  } else {
+    h += `<section class="timer idle"><div class="clock">0:00:00</div><p class="muted">Toca un cliente para empezar a contar.</p></section>`;
+  }
+
+  const todayMap = {};
+  timeEntries().filter(e => e.date === todayKey()).forEach(e => { todayMap[e.clientId] = (todayMap[e.clientId] || 0) + e.mins; });
+  const list = activeClients();
+  h += `<section class="sec"><div class="cgrid" id="cgrid">${list.map((c, i) => `
+      <button class="cbtn ${t && t.clientId === c.id ? "on" : ""}" data-act="start" data-id="${c.id}" style="--c:${c.color}" aria-label="Empezar con ${esc(c.name)}">
+        <span class="em">${esc(c.emoji)}</span><span class="txt"><span class="nm">${esc(c.name)}</span>
+        <span class="t">${todayMap[c.id] ? durShort(todayMap[c.id]) + " hoy" : c.kind === "own" ? "Propio" : c.kind === "internal" ? "No facturable" : "&nbsp;"}</span></span>
+        ${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}</button>`).join("")}
+      <button class="cbtn add" data-act="newClient">+ Cliente</button></div>
+    <p class="hint">Mantén pulsado un cliente para sumarle 15 min sin cronómetro.</p></section>`;
+
+  h += `<div class="btns" style="justify-content:space-between"><button class="btn" data-act="manual">Apuntar a mano</button>
+    <label class="check small" style="gap:10px;font-size:14px"><span>🍅 Pomodoro</span><input type="checkbox" class="switch" id="pomoSw" data-act="pomo" ${st.pomodoro ? "checked" : ""}></label></div>`;
+
+  const today = entriesList().filter(e => e.date === todayKey()).sort((a, b) => (b.start || b.ts || 0) - (a.start || a.ts || 0));
+  const tot = today.filter(e => (e.kind || "time") === "time").reduce((a, e) => a + e.mins, 0);
+  h += `<section class="sec"><div class="sec-h"><h2>Registros de hoy</h2><span class="aside num">${tot ? dur(tot) : ""}</span></div>
+    ${today.length ? `<div class="list">${today.map(entryRow).join("")}</div>` : `<div class="list"><p class="empty">Todavía no hay nada apuntado hoy.</p></div>`}</section>`;
+  return h;
+}
+function entryRow(e) {
+  const c = clientsById()[e.clientId] || { name: "Cliente borrado", emoji: "·", color: "#8e8e93" };
+  const kind = e.kind || "time";
+  let t2 = "", end = "";
+  if (kind === "time") { t2 = [e.task, e.note, e.km ? `${e.km} km` : ""].filter(Boolean).map(esc).join(" · ") || (e.src === "quick" ? "Rato rápido" : "Sin tarea"); end = durShort(e.mins); }
+  if (kind === "piece") { t2 = `Entrega · ${esc(e.piece)}`; end = `${e.qty} × ${eur(e.price)}`; }
+  if (kind === "expense") { t2 = `Gasto · ${esc(e.note || "")}`; end = `−${eur(e.amount, true)}`; }
+  return `<button class="row" data-act="editEntry" data-id="${e.id}" style="--c:${c.color}"><span class="em" style="width:32px;height:32px;font-size:16px">${esc(c.emoji)}</span>
+    <span class="main"><span class="t1" style="display:block">${esc(c.name)}</span><span class="t2" style="display:block">${t2}</span></span><span class="end">${end}</span></button>`;
+}
+function onboarding() {
+  return `<section class="card sec" style="gap:14px"><h2 style="font-size:20px">Empieza por tu primer cliente</h2>
+    <p class="muted">Solo hace falta el nombre. El color, el emoji y la forma de cobro los puedes cambiar después.</p>
+    <form class="inline" id="obForm"><input id="obName" placeholder="Nombre del cliente" autocomplete="off" aria-label="Nombre del cliente"><button class="btn primary" type="submit">Añadir</button></form>
+    <p class="small muted">¿Quieres verla funcionando antes? <button class="btn ghost sm" data-act="loadDemo" style="text-decoration:underline">Cargar datos de ejemplo</button></p></section>`;
+}
+function alertsHtml() {
+  const st = S.settings, cl = clientsById(), out = [];
+  if (S.cloudNote) out.push(`<div class="alert"><span class="e">☁️</span><div class="body"><p>${esc(S.cloudNote)}</p></div></div>`);
+  if (st.clients.some(c => c.demo)) out.push(`<div class="demo"><span>Estás viendo <b>datos de ejemplo</b>.</span><button class="btn sm" data-act="clearDemo">Borrar el ejemplo</button></div>`);
+  const t = S.timer;
+  if (t && cl[t.clientId] && !t.pausedAt) {
+    const lim = (num(st.forgotHours) || 2) * 3600e3, a = activeMs(t);
+    if (a > lim && (!t.ackAt || Date.now() - t.ackAt > lim)) out.push(`<div class="alert warn"><span class="e">⏰</span><div class="body"><p>El cronómetro de <b>${esc(cl[t.clientId].name)}</b> lleva ${dur(a / 60000)} encendido. ¿Sigues con ello?</p>
+      <div class="btns"><button class="btn sm" data-act="ackForgot">Sí, sigo</button><button class="btn sm" data-act="stoppedEarlier">Paré antes…</button></div></div></div>`);
+  }
+  const todayM = minsOnDay(todayKey()) + (t && !t.pausedAt ? activeMs(t) / 60000 : 0);
+  const lim = (num(st.dailyLimit) || 0) * 60;
+  if (lim && todayM >= lim && !S.dismissed["over" + todayKey()]) out.push(`<div class="alert warn"><span class="e">⚠️</span><div class="body"><p>Hoy llevas ${dur(todayM)}. Quizá sea buen momento para parar.</p><div class="btns"><button class="btn sm" data-act="dismiss" data-k="over${todayKey()}">Entendido</button></div></div></div>`);
+  const g = gaps();
+  if (g.length) out.push(`<div class="alert"><span class="e">🗓️</span><div class="body"><p>${g.length === 1 ? "Un día quedó en blanco" : `${g.length} días quedaron en blanco`}. ¿Los rellenamos?</p>
+    <div class="chips">${g.map(k => `<button class="chip" data-act="gap" data-d="${k}">${esc(fShort.format(parseD(k)))}</button>`).join("")}<button class="chip" data-act="holidayGaps" title="Marcar estos días como libres">Fueron libres</button></div></div></div>`);
+  const nr = st.clients.filter(needsRate);
+  if (nr.length) out.push(`<div class="alert"><span class="e">💶</span><div class="body"><p>${nr.length === 1 ? `A <b>${esc(nr[0].name)}</b> le falta` : `A ${nr.length} clientes les falta`} la tarifa o el precio. Sin eso no puedo calcular la rentabilidad.</p><div class="btns"><button class="btn sm" data-act="${nr.length === 1 ? "editClient" : "nav"}" data-id="${nr[0].id}" data-v="clientes">Completar</button></div></div></div>`);
+  const mF = dkey(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  for (const c of st.clients) {
+    if (c.archived || c.kind !== "paid" || c.billing !== "retainer") continue;
+    const inc = num(c.includedHours); if (!inc) continue;
+    const m = timeEntries().filter(e => e.clientId === c.id && e.date >= mF).reduce((a, e) => a + e.mins, 0);
+    if (m > inc * 60) out.push(`<div class="alert"><span class="e">📦</span><div class="body"><p><b>${esc(c.name)}</b> ha usado ${durShort(m)} de ${inc} h incluidas este mes.</p></div></div>`);
+  }
+  if (S.caps.mcp) {
+    const cs = S.cal;
+    let body = `<p>Mira tus eventos de los últimos 7 días y apunta los que sean de clientes.</p><div class="btns"><button class="btn sm" data-act="scanCal" ${cs.busy ? "disabled" : ""}>${cs.busy ? "Buscando…" : "Revisar el calendario"}</button></div>`;
+    if (cs.err) body += `<p class="small" style="color:var(--bad)">${esc(cs.err)}</p>`;
+    if (cs.list) {
+      body = cs.list.length ? `<p>He encontrado ${cs.list.length === 1 ? "un evento" : cs.list.length + " eventos"} de clientes sin apuntar:</p>` + cs.list.map((s, i) => {
+        const c = cl[s.clientId];
+        return `<div class="row" style="padding:8px 0;border-top:1px solid var(--line);--c:${c.color}"><span class="dot"></span><span class="main"><span class="t1" style="display:block">${esc(s.summary)}</span><span class="t2" style="display:block">${esc(c.name)} · ${esc(fShort.format(parseD(s.date)))} · ${durShort(s.mins)}</span></span>
+          <span class="btns"><button class="btn sm primary" data-act="calOk" data-i="${i}">Apuntar</button><button class="btn sm ghost" data-act="calNo" data-i="${i}" aria-label="Descartar">✕</button></span></div>`;
+      }).join("") : `<p>No hay eventos de clientes pendientes en los últimos 7 días.</p><div class="btns"><button class="btn sm" data-act="calClose">Vale</button></div>`;
+    }
+    out.push(`<div class="alert"><span class="e">📅</span><div class="body">${body}</div></div>`);
+  }
+  return out.length ? `<div class="alerts">${out.join("")}</div>` : "";
+}
+
+/* ---------- INFORMES ---------- */
+function viewInformes() {
+  const st = S.settings, cl = clientsById(), r = S.report;
+  const [f, t] = periodBounds(); const [pf, pt] = prevBounds(f, t);
+  const C = calc(f, t), Pv = calc(pf, pt);
+  const delta = (a, b, money) => {
+    if (!b) return "";
+    const d = (a - b) / Math.abs(b) * 100; if (!Number.isFinite(d)) return "";
+    const s = Math.round(d); if (s === 0) return `<span class="delta">= que antes</span>`;
+    return `<span class="delta ${s > 0 ? "up" : "down"}">${s > 0 ? "↑" : "↓"} ${Math.abs(s)} %</span>`;
+  };
+  let h = `<header class="top"><div><h1>Informes</h1><p class="sub">${esc(periodLabel(f, t))}</p></div>
+    <div class="top-actions"><button class="iconbtn" data-act="eye" aria-label="${S.hide ? "Mostrar cifras de dinero" : "Ocultar cifras de dinero"}">${S.hide ? IC.eyeOff : IC.eye}</button></div></header>`;
+  h += `<div class="period"><div class="seg" role="group" aria-label="Periodo">${[["week", "Semana"], ["month", "Mes"], ["range", "Rango"]].map(([k, l]) => `<button data-act="per" data-m="${k}" aria-pressed="${r.mode === k}">${l}</button>`).join("")}</div>
+    ${r.mode === "range" ? `<div class="inline" style="flex-wrap:wrap"><input type="date" id="rFrom" value="${f}" aria-label="Desde" style="width:auto"><input type="date" id="rTo" value="${t}" aria-label="Hasta" style="width:auto"></div>`
+      : `<div class="nav"><button class="iconbtn" data-act="prev" aria-label="Periodo anterior">${IC.prev}</button><button class="btn sm" data-act="nowPer">Actual</button><button class="iconbtn" data-act="next" aria-label="Periodo siguiente">${IC.next}</button></div>`}</div>`;
+
+  if (!st.clients.length) return h + `<div class="card empty">Cuando apuntes horas, aquí verás cuánto tiempo y dinero te deja cada cliente.</div>`;
+
+  h += `<section class="kpis">
+    <div class="card kpi"><span class="l">Horas totales</span><span class="v">${durShort(C.T.mins)}</span>${delta(C.T.mins, Pv.T.mins)}</div>
+    <div class="card kpi"><span class="l">Facturables</span><span class="v">${durShort(C.T.bill)}</span>${delta(C.T.bill, Pv.T.bill)}</div>
+    <div class="card kpi"><span class="l">Ingresos (sin IVA)</span><span class="v">${eur(C.T.rev)}</span>${S.hide ? "" : delta(C.T.rev, Pv.T.rev)}</div>
+    <div class="card kpi"><span class="l">€/hora real</span><span class="v">${eurH(C.T.eurH)}</span>${S.hide ? "" : delta(C.T.eurH || 0, Pv.T.eurH || 0)}</div></section>`;
+
+  const mg = num(st.goals.monthIncome);
+  if (r.mode === "month" && mg) {
+    const p = clamp(C.T.rev / mg * 100, 0, 100);
+    h += `<section class="card goal"><div class="sec-h"><h2>Objetivo de ingresos</h2><span class="aside">${S.hide ? "" : Math.round(C.T.rev / mg * 100) + " %"}</span></div>
+      <div class="big">${eur(C.T.rev)}<small>de ${eur(mg)}</small></div><div class="meter ${C.T.rev >= mg ? "done" : ""}"><i style="width:${S.hide ? 0 : p}%"></i></div></section>`;
+  }
+
+  const byMins = [...C.rows].filter(p => p.mins > 0 || p.rev > 0).sort((a, b) => b.mins - a.mins);
+  const maxM = Math.max(1, ...byMins.map(p => p.mins));
+  h += `<section class="sec"><div class="sec-h"><h2>Por cliente</h2></div><div class="card bars">${byMins.length ? byMins.map(p => { const c = cl[p.id]; return `
+    <div class="brow" style="--c:${c.color}"><span class="lb"><span>${esc(c.emoji)}</span><span>${esc(c.name)}</span></span><span class="vl"><b>${durShort(p.mins)}</b>${c.kind === "paid" ? ` · ${eur(p.rev)}` : ""}</span><div class="bar"><i style="width:${p.mins / maxM * 100}%"></i></div></div>`; }).join("") : `<p class="empty">Sin registros en este periodo.</p>`}</div></section>`;
+
+  const paid = C.rows.filter(p => cl[p.id].kind === "paid" && (p.mins > 0 || p.rev > 0)).sort((a, b) => (b.eurH ?? -1e9) - (a.eurH ?? -1e9));
+  if (paid.length) {
+    h += `<section class="sec"><div class="sec-h"><h2>Rentabilidad</h2><span class="aside">mínimo ${eurH(num(st.minRate))}</span></div><div class="card tbl-wrap"><table class="rank">
+      <thead><tr><th>Cliente</th><th>Horas</th><th>Ingresos</th><th>Costes</th><th>€/hora</th></tr></thead><tbody>
+      ${paid.map(p => { const c = cl[p.id]; const tags = [];
+        if (p.vampire) tags.push(`<span class="pill bad">🧛 Vampiro</span>`);
+        else if (p.low) tags.push(`<span class="pill warn">Bajo el mínimo</span>`);
+        if (p.noRate || needsRate(c)) tags.push(`<span class="pill">Falta tarifa</span>`);
+        if (c.billing === "retainer" && num(c.includedHours) && r.mode === "month") tags.push(`<span class="pill ${p.mins > num(c.includedHours) * 60 ? "warn" : ""}">${durShort(p.mins)} de ${num(c.includedHours)} h</span>`);
+        return `<tr><td><span class="cn"><span>${esc(c.emoji)}</span>${esc(c.name)}</span>${tags.length ? `<span class="tags">${tags.join("")}</span>` : ""}</td>
+          <td>${durShort(p.mins)}</td><td>${eur(p.rev)}</td><td>${p.cost ? eur(p.cost) : "—"}</td><td><b>${eurH(p.eurH)}</b></td></tr>`; }).join("")}
+      </tbody></table></div><p class="small muted">€/hora real = (ingresos − km − gastos) ÷ todas las horas dedicadas al cliente. Vampiro: más del 15 % de tus horas de pago por debajo del mínimo.</p></section>`;
+  }
+
+  const lineArr = Object.entries(C.lines).filter(([, v]) => v.mins > 0 || v.rev > 0).sort((a, b) => b[1].mins - a[1].mins);
+  const maxL = Math.max(1, ...lineArr.map(([, v]) => v.mins));
+  if (lineArr.length) h += `<section class="sec"><div class="sec-h"><h2>Por línea de negocio</h2></div><div class="card bars">${lineArr.map(([k, v]) => `
+    <div class="brow"><span class="lb"><span>${esc(k)}</span></span><span class="vl"><b>${durShort(v.mins)}</b> · ${eur(v.rev)}</span><div class="bar"><i style="width:${v.mins / maxL * 100}%"></i></div></div>`).join("")}</div></section>`;
+
+  const taskArr = Object.entries(C.tasks).sort((a, b) => b[1] - a[1]);
+  const totT = taskArr.reduce((a, [, v]) => a + v, 0) || 1;
+  if (taskArr.length) h += `<section class="sec"><div class="sec-h"><h2>Por tipo de tarea</h2></div><div class="card bars">${taskArr.map(([k, v]) => `
+    <div class="brow"><span class="lb"><span>${esc(k)}</span></span><span class="vl"><b>${durShort(v)}</b> · ${Math.round(v / totT * 100)} %</span><div class="bar"><i style="width:${v / taskArr[0][1] * 100}%"></i></div></div>`).join("")}</div></section>`;
+
+  h += `<section class="sec"><div class="sec-h"><h2>Evolución semanal</h2><span class="aside">horas facturables</span></div><div class="card">${weeklyChart(t)}</div></section>`;
+  h += `<section class="sec"><div class="sec-h"><h2>Días trabajados</h2><span class="aside">últimas 18 semanas</span></div><div class="card sec">${heatmap()}</div></section>`;
+
+  if (r.mode === "month") h += billingHtml(f, C);
+
+  if (S.caps.sample) {
+    const a = S.ai;
+    h += `<section class="sec"><div class="sec-h"><h2>Pregúntale a Claude</h2></div><div class="card sec" style="gap:12px">
+      <div class="btns"><button class="btn" data-act="aiRun" ${a.busy ? "disabled" : ""}>Analiza este periodo</button></div>
+      <form class="inline" id="aiForm"><input id="aiQ" placeholder="¿Qué cliente debería subir de precio?" value="${esc(a.q)}" autocomplete="off" aria-label="Pregunta para Claude"><button class="btn primary" type="submit" ${a.busy ? "disabled" : ""}>Preguntar</button></form>
+      <div class="ai-out" id="aiOut">${a.err ? `<p style="color:var(--bad)">${esc(a.err)}</p>` : aiHtml(a.text)}</div></div></section>`;
+  }
+  h += `<div class="btns"><button class="btn" data-act="exportCsv">Exportar a Excel (CSV)</button></div>`;
+  return h;
+}
+function aiHtml(text) {
+  if (!text) return "";
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  let out = "", inList = false;
+  const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  for (const l of lines) {
+    const m = l.match(/^([-*•]|\d+[.)])\s+(.*)/);
+    if (m) { if (!inList) { out += "<ul>"; inList = true; } out += `<li>${fmt(m[2])}</li>`; }
+    else { if (inList) { out += "</ul>"; inList = false; } out += `<p>${fmt(l.replace(/^#+\s*/, ""))}</p>`; }
+  }
+  return out + (inList ? "</ul>" : "");
+}
+function weeklyChart(endKey) {
+  const end = startOfWeek(parseD(endKey)); const weeks = [];
+  for (let i = 11; i >= 0; i--) {
+    const s = addDays(end, -7 * i), f = dkey(s), t = dkey(addDays(s, 6));
+    weeks.push({ s, v: timeEntries().filter(e => e.billable && e.date >= f && e.date <= t).reduce((a, e) => a + e.mins, 0) / 60 });
+  }
+  const goal = num(S.settings.goals.weekHours) || 0;
+  const max = Math.max(goal, ...weeks.map(w => w.v), 1) * 1.12;
+  const W = 600, H = 190, L = 30, B = 22, T = 8, bw = (W - L) / 12;
+  const y = v => T + (H - T - B) * (1 - v / max);
+  const ticks = [0, Math.round(max / 2), Math.floor(max)].filter((v, i, a) => a.indexOf(v) === i);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Horas facturables por semana, últimas 12 semanas">`;
+  for (const tk of ticks) s += `<line x1="${L}" x2="${W}" y1="${y(tk)}" y2="${y(tk)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(tk) + 4}" text-anchor="end">${tk}</text>`;
+  weeks.forEach((w, i) => {
+    const x = L + i * bw + bw * 0.18, bh = Math.max(0, y(0) - y(w.v));
+    s += `<rect x="${x}" y="${y(w.v)}" width="${bw * 0.64}" height="${bh}" rx="4" fill="${i === 11 ? "var(--fg)" : "var(--faint)"}"><title>Semana del ${fDM.format(w.s)}: ${durShort(w.v * 60)}</title></rect>`;
+    if (i % 2 === 1 || i === 11) s += `<text x="${x + bw * 0.32}" y="${H - 6}" text-anchor="middle">${fDM.format(w.s).replace(".", "")}</text>`;
+  });
+  if (goal) s += `<line x1="${L}" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${W - 2}" y="${y(goal) - 5}" text-anchor="end" style="fill:var(--good)">objetivo ${goal} h</text>`;
+  return s + "</svg>";
+}
+function heatmap() {
+  const end = addDays(startOfWeek(new Date()), 6), start = addDays(startOfWeek(new Date()), -7 * 17);
+  const m = {}; timeEntries().forEach(e => { m[e.date] = (m[e.date] || 0) + e.mins; });
+  let cells = "";
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    const k = dkey(d), v = (m[k] || 0) / 60;
+    const cls = k > todayKey() ? "out" : v === 0 ? (isOff(k) ? "hol" : "") : v < 2 ? "l1" : v < 4 ? "l2" : v < 6 ? "l3" : "l4";
+    cells += `<i class="${cls}" title="${esc(fShort.format(d))}: ${v ? durShort(v * 60) : "nada"}"></i>`;
+  }
+  return `<div class="heat-wrap"><div class="heat" role="img" aria-label="Horas trabajadas por día">${cells}</div></div>
+    <div class="legend">Menos <i style="background:var(--fill)"></i><i class="l1" style="background:color-mix(in srgb,var(--fg) 22%,var(--fill))"></i><i style="background:color-mix(in srgb,var(--fg) 45%,var(--fill))"></i><i style="background:color-mix(in srgb,var(--fg) 68%,var(--fill))"></i><i style="background:var(--fg)"></i> Más · 6 h o más</div>`;
+}
+const BILL = ["pendiente", "facturado", "cobrado"];
+function billingHtml(f, C) {
+  const cl = clientsById(), ym = f.slice(0, 7);
+  const rows = C.rows.filter(p => cl[p.id].kind === "paid" && p.rev > 0).sort((a, b) => b.rev - a.rev);
+  if (!rows.length) return "";
+  let pend = 0;
+  const html = rows.map(p => {
+    const c = cl[p.id], k = `${p.id}|${ym}`, s = S.settings.billing[k] || "pendiente";
+    if (s !== "cobrado") pend += p.rev;
+    return `<div class="row" style="--c:${c.color}"><span class="dot"></span><span class="main"><span class="t1" style="display:block">${esc(c.name)}</span></span><span class="end">${eur(p.rev)}</span>
+      <button class="pill ${s === "cobrado" ? "good" : s === "facturado" ? "warn" : ""}" style="border:0;cursor:pointer" data-act="billCycle" data-k="${k}" aria-label="Estado de cobro: ${s}. Toca para cambiar">${cap(s)}</button></div>`;
+  }).join("");
+  let older = 0;
+  for (let i = 1; i <= 6; i++) {
+    const a = parseD(f); const s = new Date(a.getFullYear(), a.getMonth() - i, 1), e = new Date(s.getFullYear(), s.getMonth() + 1, 0);
+    const Cx = calc(dkey(s), dkey(e)), ymx = dkey(s).slice(0, 7);
+    Cx.rows.forEach(p => { if (cl[p.id].kind === "paid" && p.rev > 0 && (S.settings.billing[`${p.id}|${ymx}`] || "pendiente") !== "cobrado") older += p.rev; });
+  }
+  return `<section class="sec"><div class="sec-h"><h2>Cobros del mes</h2><span class="aside">pendiente ${eur(pend)}</span></div><div class="list">${html}</div>
+    <p class="small muted">Toca el estado para pasarlo a facturado y después a cobrado.${older > 0 ? ` Pendiente de los 6 meses anteriores: <b>${eur(older)}</b>.` : ""}</p></section>`;
+}
+
+/* ---------- CLIENTES ---------- */
+function viewClientes() {
+  const st = S.settings;
+  const act = st.clients.filter(c => !c.archived), arch = st.clients.filter(c => c.archived);
+  const groups = {};
+  for (const c of act) { const g = c.kind === "internal" ? "Interno" : (c.line || "Sin línea"); (groups[g] = groups[g] || []).push(c); }
+  const order = [...st.lines, "Sin línea", "Interno"].filter(g => groups[g]).concat(Object.keys(groups).filter(g => ![...st.lines, "Sin línea", "Interno"].includes(g)));
+  const row = c => {
+    const kindTxt = c.kind === "own" ? "Propio · sin tarifa" : c.kind === "internal" ? "No facturable" : billingSummary(c);
+    return `<button class="row" data-act="editClient" data-id="${c.id}" style="--c:${c.color}"><span class="em">${esc(c.emoji)}</span><span class="main"><span class="t1" style="display:block">${esc(c.name)}</span><span class="t2" style="display:block">${esc(kindTxt)}</span></span>${needsRate(c) ? `<span class="pill warn">Falta tarifa</span>` : ""}<span class="muted">›</span></button>`;
+  };
+  let h = `<header class="top"><div><h1>Clientes</h1><p class="sub">${act.length} ${act.length === 1 ? "activo" : "activos"}</p></div></header>
+    <form class="inline" id="ncForm"><input id="ncName" placeholder="Nombre del cliente nuevo" autocomplete="off" aria-label="Nombre del cliente nuevo"><button class="btn primary" type="submit">Añadir</button></form>`;
+  if (!act.length) h += `<div class="card empty">Aún no hay clientes. Escribe un nombre arriba para crear el primero.</div>`;
+  for (const g of order) h += `<section class="sec"><div class="sec-h"><h2>${esc(g)}</h2></div><div class="list">${groups[g].sort((a, b) => a.name.localeCompare(b.name, "es")).map(row).join("")}</div></section>`;
+  if (arch.length) h += `<details class="sec"><summary class="muted" style="cursor:pointer;font-weight:600">Archivados (${arch.length})</summary><div class="list" style="margin-top:10px">${arch.map(row).join("")}</div></details>`;
+  return h;
+}
+function billingSummary(c) {
+  const b = c.billing || "hourly";
+  if (b === "hourly") return num(c.rate) != null ? `Por horas · ${S.hide ? "••" : num(c.rate)} €/h` : "Por horas";
+  if (b === "retainer") return `Iguala${num(c.fee) != null ? ` · ${S.hide ? "••" : num(c.fee)} €/mes` : ""}${num(c.includedHours) ? ` · ${num(c.includedHours)} h incluidas` : ""}`;
+  if (b === "piece") return `Por pieza${(c.pieces || []).length ? " · " + c.pieces.map(p => p.name).join(", ") : ""}`;
+  if (b === "fixed") return `Precio cerrado${num(c.total) != null ? ` · ${S.hide ? "••" : num(c.total)} €` : ""}`;
+  return "";
+}
+function newClient(name) {
+  name = (name || "").trim(); if (!name) return null;
+  const st = S.settings, n = st.clients.length;
+  const c = { id: uid(), name, emoji: EMOJIS[n % EMOJIS.length], color: COLORS[n % COLORS.length], line: "", kind: "paid", billing: "hourly", rate: "", taskRates: {}, fee: "", includedHours: "", pieces: [], total: "", keywords: "", note: "", archived: false, createdAt: Date.now(), lastUsed: Date.now() - 1000 };
+  st.clients.push(c);
+  if (!st.clients.some(x => x.kind === "internal")) st.clients.push({ id: uid(), name: "Interno", emoji: "🗂️", color: "#8e8e93", line: "", kind: "internal", billing: "hourly", keywords: "", note: "Administración, formación, buscar clientes…", archived: false, createdAt: Date.now(), lastUsed: 0 });
+  Store.saveSettings(true);
+  return c;
+}
+
+/* ---------- AJUSTES ---------- */
+function viewAjustes() {
+  const st = S.settings;
+  const nf = (id, label, val, suffix, hint) => `<label class="f" for="${id}"><span>${label}${hint ? `<span class="muted">${hint}</span>` : ""}</span><div class="inline"><input id="${id}" data-set="${id}" inputmode="decimal" value="${esc(val ?? "")}"><span class="muted small" style="white-space:nowrap">${suffix}</span></div></label>`;
+  return `<header class="top"><div><h1>Ajustes</h1><p class="sub">Objetivos, avisos y datos</p></div></header>
+  <section class="sec"><div class="sec-h"><h2>Objetivos</h2></div><div class="card fields" style="display:flex;flex-direction:column;gap:14px">
+    <div class="grid2">${nf("goals.weekHours", "Horas facturables por semana", st.goals.weekHours, "h")}${nf("goals.monthIncome", "Ingresos al mes", st.goals.monthIncome || "", "€", "sin IVA")}</div>
+    <div class="grid2">${nf("minRate", "€/hora mínimo", st.minRate, "€/h")}${nf("kmRate", "Coste por km", st.kmRate, "€/km")}</div></div></section>
+  <section class="sec"><div class="sec-h"><h2>Avisos</h2></div><div class="card" style="display:flex;flex-direction:column;gap:14px">
+    <div class="grid2">${nf("dailyLimit", "Aviso de sobrecarga", st.dailyLimit, "h al día")}${nf("forgotHours", "Cronómetro olvidado", st.forgotHours, "h")}</div>
+    <div class="grid2">${nf("pomoWork", "Pomodoro: trabajo", st.pomoWork, "min")}${nf("pomoBreak", "Pomodoro: descanso", st.pomoBreak, "min")}</div>
+    <label class="check"><span>Sonido al arrancar y parar</span><input type="checkbox" class="switch" id="sndSw" data-set="sound" ${st.sound ? "checked" : ""}></label></div></section>
+  <section class="sec"><div class="sec-h"><h2>Tipos de tarea</h2></div><div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <div class="chips">${st.tasks.map((t, i) => `<button class="chip" data-act="delTask" data-i="${i}" aria-label="Quitar ${esc(t)}">${esc(t)} <span class="x">×</span></button>`).join("")}</div>
+    <form class="inline" id="taskForm"><input id="taskNew" placeholder="Nuevo tipo de tarea" autocomplete="off" aria-label="Nuevo tipo de tarea"><button class="btn" type="submit">Añadir</button></form></div></section>
+  <section class="sec"><div class="sec-h"><h2>Líneas de negocio</h2></div><div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <div class="chips">${st.lines.map((t, i) => `<button class="chip" data-act="delLine" data-i="${i}" aria-label="Quitar ${esc(t)}">${esc(t)} <span class="x">×</span></button>`).join("")}</div>
+    <form class="inline" id="lineForm"><input id="lineNew" placeholder="Nueva línea de negocio" autocomplete="off" aria-label="Nueva línea de negocio"><button class="btn" type="submit">Añadir</button></form></div></section>
+  <section class="sec"><div class="sec-h"><h2>Días de trabajo</h2><span class="aside">${st.workDays.length} ${st.workDays.length === 1 ? "día" : "días"} a la semana</span></div><div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <div class="seg" role="group" aria-label="Días por semana">${[[5, "5 días", [1, 2, 3, 4, 5]], [6, "6 días", [1, 2, 3, 4, 5, 6]], [7, "7 días", [0, 1, 2, 3, 4, 5, 6]]].map(([n, l, d]) => `<button data-act="workPreset" data-days="${d.join(",")}" aria-pressed="${st.workDays.length === n && d.every(x => st.workDays.includes(x))}">${l}</button>`).join("")}</div>
+    <div class="chips" role="group" aria-label="Qué días trabajas">${WD.map(([n, s, l]) => `<button class="chip" data-act="workDay" data-d="${n}" aria-pressed="${st.workDays.includes(n)}" aria-label="${l}" style="min-width:42px;justify-content:center">${s}</button>`).join("")}</div>
+    <p class="small muted">Los días que no trabajas no cuentan como días en blanco ni rompen tu racha.</p></div></section>
+  <section class="sec"><div class="sec-h"><h2>Vacaciones y festivos</h2><span class="aside">no cuentan como días en blanco</span></div><div class="card" style="display:flex;flex-direction:column;gap:12px">
+    ${st.holidays.length ? `<div class="chips">${[...st.holidays].sort().map(d => `<button class="chip" data-act="delHoliday" data-d="${d}" aria-label="Quitar ${d}">${esc(fShort.format(parseD(d)))} ${parseD(d).getFullYear() !== new Date().getFullYear() ? parseD(d).getFullYear() : esc(fDM.format(parseD(d)).split(" ")[1] || "")} <span class="x">×</span></button>`).join("")}</div>` : `<p class="muted small">Ningún día marcado.</p>`}
+    <form class="inline" id="holForm"><input type="date" id="holNew" aria-label="Día libre"><input type="date" id="holTo" aria-label="Hasta (opcional)"><button class="btn" type="submit">Añadir</button></form>
+    <p class="small muted">Para unas vacaciones, rellena también la segunda fecha.</p></div></section>
+  <section class="sec"><div class="sec-h"><h2>Tus datos</h2></div><div class="card" style="display:flex;flex-direction:column;gap:12px">
+    <p>${S.mode === "cloud" ? "☁️ Se guardan en la nube, en tu espacio privado, y se sincronizan entre tus dispositivos." : S.mode === "local" ? "💾 Se guardan solo en este navegador. Descarga una copia de vez en cuando para no perderlos." : "Conectando…"}</p>
+    <div class="btns"><button class="btn" data-act="backup">Descargar copia</button><button class="btn" data-act="importAsk">Restaurar copia</button>
+      ${st.clients.some(c => c.demo) ? `<button class="btn" data-act="clearDemo">Borrar datos de ejemplo</button>` : `<button class="btn" data-act="loadDemo">Cargar datos de ejemplo</button>`}</div>
+    <div id="wipeBox"><button class="btn danger" data-act="wipeAsk">Borrar todos los datos…</button></div></div></section>
+  <p class="small muted" style="text-align:center">Bitácora · código abierto · los importes son siempre sin IVA</p>`;
+}
+
+/* ============ hojas ============ */
+let sheetClose = null;
+function openSheet(html, mount, onClose) {
+  const root = $("#sheet");
+  root.innerHTML = `<div class="scrim" id="scrim"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+  const sc = $("#scrim");
+  sc.addEventListener("click", e => { if (e.target === sc) closeSheet(); });
+  sheetClose = onClose || null;
+  if (mount) mount($(".sheet", root));
+  const f = $(".sheet [autofocus]", root) || $(".sheet button, .sheet input", root); if (f && matchMedia("(hover:hover)").matches) f.focus();
+}
+function closeSheet() { const fn = sheetClose; sheetClose = null; $("#sheet").innerHTML = ""; if (fn) fn(); render(); }
+const sheetOpen = () => !!$("#scrim");
+const sheetHead = (title, extra = "") => `<div class="sheet-h"><h3>${title}</h3><div class="btns">${extra}<button class="btn sm" data-act="closeSheet">Listo</button></div></div>`;
+
+/* hoja: al parar */
+function openStopSheet(id) {
+  const draw = () => {
+    const e = S.entries[id]; if (!e) return closeSheet();
+    const c = clientsById()[e.clientId] || { name: "" };
+    return `${sheetHead(`Guardado · ${dur(e.mins)}`)}
+      <p class="muted" style="margin-top:-10px">${esc(c.name)}. Si quieres, añade qué hiciste.</p>
+      <div class="fields"><div class="f"><span>Tarea</span><div class="chips">${S.settings.tasks.map(t => `<button class="chip" data-st="${esc(t)}" aria-pressed="${e.task === t}">${esc(t)}</button>`).join("")}</div></div>
+      <label class="f" for="sNote"><span>Descripción</span><input id="sNote" value="${esc(e.note)}" placeholder="Edición del reel 3" autocomplete="off"></label>
+      ${e.task === "Desplazamiento" ? `<label class="f" for="sKm"><span>Kilómetros</span><input id="sKm" inputmode="decimal" value="${e.km || ""}" placeholder="0"></label>` : ""}</div>`;
+  };
+  const mount = el => {
+    el.addEventListener("click", ev => { const b = ev.target.closest("[data-st]"); if (!b) return; const e = S.entries[id]; e.task = e.task === b.dataset.st ? null : b.dataset.st; Store.putEntry(e); el.innerHTML = draw(); });
+    el.addEventListener("input", ev => { const e = S.entries[id]; if (!e) return; if (ev.target.id === "sNote") e.note = ev.target.value; if (ev.target.id === "sKm") e.km = num(ev.target.value) || 0; Local.persist(); });
+  };
+  openSheet(draw(), mount, () => { const e = S.entries[id]; if (e) Store.putEntry(e); });
+}
+
+/* hoja: tarea del cronómetro */
+function openTaskPicker() {
+  const t = S.timer; if (!t) return;
+  openSheet(`${sheetHead("¿Qué estás haciendo?")}<div class="chips">${S.settings.tasks.map(x => `<button class="chip" data-tp="${esc(x)}" aria-pressed="${t.task === x}">${esc(x)}</button>`).join("")}</div>
+    <label class="f" for="tpNote"><span>Descripción (opcional)</span><input id="tpNote" value="${esc(t.note || "")}" autocomplete="off"></label>`, el => {
+    el.addEventListener("click", ev => { const b = ev.target.closest("[data-tp]"); if (!b || !S.timer) return; S.timer.task = S.timer.task === b.dataset.tp ? null : b.dataset.tp; Store.saveTimer(); closeSheet(); });
+    el.addEventListener("input", ev => { if (ev.target.id === "tpNote" && S.timer) S.timer.note = ev.target.value; });
+  }, () => { if (S.timer) Store.saveTimer(); });
+}
+
+/* hoja: paré antes */
+function openStoppedEarlier() {
+  const t = S.timer; if (!t) return;
+  const d = new Date(t.startedAt + (t.pausedMs || 0) + 3600e3);
+  openSheet(`${sheetHead("¿A qué hora paraste?")}<p class="muted" style="margin-top:-10px">Empezaste a las ${pad(new Date(t.startedAt).getHours())}:${pad(new Date(t.startedAt).getMinutes())}.</p>
+    <div class="inline"><input type="time" id="seTime" value="${pad(d.getHours())}:${pad(d.getMinutes())}" aria-label="Hora de fin"><button class="btn primary" id="seOk">Guardar</button></div>`, el => {
+    $("#seOk", el).onclick = () => {
+      const v = $("#seTime", el).value; if (!v || !S.timer) return;
+      const [hh, mm] = v.split(":").map(Number); const s = new Date(S.timer.startedAt);
+      let end = new Date(s.getFullYear(), s.getMonth(), s.getDate(), hh, mm).getTime();
+      if (end <= S.timer.startedAt) end += 864e5;
+      if (end > Date.now()) end = Date.now();
+      $("#sheet").innerHTML = ""; sheetClose = null; stopTimer(end);
+    };
+  });
+}
+
+/* hoja: apuntar / editar registro */
+function openEntrySheet(opts = {}) {
+  const editing = opts.id ? S.entries[opts.id] : null;
+  const act = activeClients();
+  const D = editing ? clone(editing) : { id: uid(), kind: opts.kind || "time", clientId: opts.clientId || (act[0] && act[0].id), date: opts.date || todayKey(), mins: 60, task: null, note: "", km: 0, billable: null, qty: 1, piece: "", price: 0, amount: "" };
+  D.kind = D.kind || "time";
+  const draw = () => {
+    const cl = clientsById(), c = cl[D.clientId];
+    const pool = editing && c && c.archived ? [c, ...act] : act;
+    const list = D.kind === "piece" ? pool.filter(x => x.kind === "paid" && x.billing === "piece") : pool;
+    const yest = dkey(addDays(new Date(), -1));
+    let body = `${sheetHead(editing ? "Editar registro" : "Apuntar a mano")}
+      <div class="seg" role="group" aria-label="Tipo de registro">${[["time", "Tiempo"], ["piece", "Pieza entregada"], ["expense", "Gasto"]].map(([k, l]) => `<button data-k="${k}" aria-pressed="${D.kind === k}">${l}</button>`).join("")}</div>
+      <div class="fields">
+      <div class="f"><span>Cliente</span>${list.length ? `<div class="chips">${list.map(x => `<button class="chip" data-c="${x.id}" aria-pressed="${D.clientId === x.id}">${esc(x.emoji)} ${esc(x.name)}</button>`).join("")}</div>` : `<p class="small">${D.kind === "piece" ? "Ningún cliente cobra por pieza. Cámbialo en su ficha, en Clientes." : "Añade un cliente primero."}</p>`}</div>
+      <div class="f"><span>Día</span><div class="inline" style="flex-wrap:wrap"><div class="chips"><button class="chip" data-d="${todayKey()}" aria-pressed="${D.date === todayKey()}">Hoy</button><button class="chip" data-d="${yest}" aria-pressed="${D.date === yest}">Ayer</button></div><input type="date" id="eDate" value="${D.date}" style="width:auto" aria-label="Otra fecha"></div></div>`;
+    if (D.kind === "time") {
+      const h = Math.floor(D.mins / 60), m = Math.round(D.mins % 60);
+      body += `<div class="f"><span>Duración</span><div class="chips">${[15, 30, 60, 90, 120, 180, 240].map(v => `<button class="chip" data-m="${v}" aria-pressed="${Math.round(D.mins) === v}">${durShort(v)}</button>`).join("")}</div>
+        <div class="inline" style="max-width:280px"><input id="eH" inputmode="numeric" value="${h}" aria-label="Horas"><span class="muted">h</span><input id="eM" inputmode="numeric" value="${m}" aria-label="Minutos"><span class="muted">min</span></div></div>
+        <div class="f"><span>Tarea <span class="muted">opcional</span></span><div class="chips">${S.settings.tasks.map(t => `<button class="chip" data-t="${esc(t)}" aria-pressed="${D.task === t}">${esc(t)}</button>`).join("")}</div></div>
+        <label class="f" for="eNote"><span>Descripción <span class="muted">opcional</span></span><input id="eNote" value="${esc(D.note)}" autocomplete="off"></label>
+        ${D.task === "Desplazamiento" || D.km ? `<label class="f" for="eKm"><span>Kilómetros</span><input id="eKm" inputmode="decimal" value="${D.km || ""}" placeholder="0"></label>` : ""}
+        <label class="check"><span>Facturable</span><input type="checkbox" class="switch" id="eBill" ${(D.billable ?? (c && c.kind === "paid")) ? "checked" : ""}></label>`;
+    } else if (D.kind === "piece") {
+      const pieces = (c && c.pieces) || [];
+      if (!D.piece && pieces[0]) { D.piece = pieces[0].name; D.price = num(pieces[0].price) || 0; }
+      body += `<div class="f"><span>Pieza</span>${pieces.length ? `<div class="chips">${pieces.map(p => `<button class="chip" data-p="${esc(p.name)}" aria-pressed="${D.piece === p.name}">${esc(p.name)} · ${eur(num(p.price) || 0)}</button>`).join("")}</div>` : `<p class="small">Este cliente no tiene piezas con precio. Añádelas en su ficha.</p>`}</div>
+        <label class="f" for="eQty"><span>Cantidad</span><input id="eQty" inputmode="numeric" value="${D.qty}" style="max-width:120px"></label>
+        <label class="f" for="eNote"><span>Descripción <span class="muted">opcional</span></span><input id="eNote" value="${esc(D.note)}" autocomplete="off"></label>`;
+    } else {
+      body += `<div class="grid2"><label class="f" for="eAmt"><span>Importe</span><div class="inline"><input id="eAmt" inputmode="decimal" value="${D.amount ?? ""}" placeholder="0"><span class="muted">€</span></div></label>
+        <label class="f" for="eNote"><span>Concepto</span><input id="eNote" value="${esc(D.note)}" placeholder="Alquiler de estudio" autocomplete="off"></label></div>`;
+    }
+    body += `</div><div class="btns" style="justify-content:space-between">${editing ? `<button class="btn danger" id="eDel">Borrar</button>` : "<span></span>"}<button class="btn primary" id="eSave">${editing ? "Guardar cambios" : "Guardar"}</button></div>`;
+    return body;
+  };
+  const mount = el => {
+    const redraw = () => { el.innerHTML = draw(); };
+    el.addEventListener("click", ev => {
+      const b = ev.target.closest("button"); if (!b) return;
+      if (b.dataset.k) { D.kind = b.dataset.k; if (D.kind === "piece") { const pc = act.find(x => x.kind === "paid" && x.billing === "piece"); const cur = clientsById()[D.clientId]; if (!(cur && cur.billing === "piece") && pc) D.clientId = pc.id; D.piece = ""; } redraw(); }
+      else if (b.dataset.c) { D.clientId = b.dataset.c; D.billable = null; D.piece = ""; redraw(); }
+      else if (b.dataset.d) { D.date = b.dataset.d; redraw(); }
+      else if (b.dataset.m) { D.mins = +b.dataset.m; redraw(); }
+      else if (b.dataset.t) { D.task = D.task === b.dataset.t ? null : b.dataset.t; redraw(); }
+      else if (b.dataset.p) { D.piece = b.dataset.p; const p = (clientsById()[D.clientId].pieces || []).find(x => x.name === D.piece); D.price = p ? num(p.price) || 0 : 0; redraw(); }
+      else if (b.id === "eDel") {
+        const snap = clone(editing); Store.delEntry(editing.id); $("#sheet").innerHTML = ""; sheetClose = null; render();
+        toast("Registro borrado", "Deshacer", () => { Store.putEntry(snap); render(); });
+      } else if (b.id === "eSave") save();
+    });
+    el.addEventListener("input", ev => {
+      const t = ev.target;
+      if (t.id === "eDate" && t.value) { D.date = t.value; }
+      if (t.id === "eH" || t.id === "eM") { D.mins = (parseInt($("#eH", el).value, 10) || 0) * 60 + (parseInt($("#eM", el).value, 10) || 0); $$("[data-m]", el).forEach(x => x.setAttribute("aria-pressed", String(+x.dataset.m === D.mins))); }
+      if (t.id === "eNote") D.note = t.value;
+      if (t.id === "eKm") D.km = num(t.value) || 0;
+      if (t.id === "eQty") D.qty = parseInt(t.value, 10) || 0;
+      if (t.id === "eAmt") D.amount = t.value;
+    });
+    el.addEventListener("change", ev => { if (ev.target.id === "eBill") D.billable = ev.target.checked; if (ev.target.id === "eDate") redraw(); });
+    const save = () => {
+      const c = clientsById()[D.clientId];
+      if (!c) return toast("Elige un cliente.");
+      const e = { id: D.id, kind: D.kind, clientId: D.clientId, date: D.date, ts: editing ? editing.ts || Date.now() : Date.now(), start: editing ? editing.start || null : null, note: (D.note || "").trim(), src: editing ? editing.src || "manual" : "manual" };
+      if (editing && editing.calId) e.calId = editing.calId;
+      if (D.kind === "time") {
+        if (!(D.mins > 0)) return toast("Indica cuánto tiempo.");
+        Object.assign(e, { mins: D.mins, task: D.task || null, km: D.km || 0, billable: D.billable ?? c.kind === "paid" });
+      } else if (D.kind === "piece") {
+        if (!D.piece) return toast("Elige una pieza.");
+        if (!(D.qty > 0)) return toast("Indica la cantidad.");
+        Object.assign(e, { piece: D.piece, qty: D.qty, price: D.price });
+      } else {
+        const a = num(D.amount); if (!(a > 0)) return toast("Indica el importe del gasto.");
+        Object.assign(e, { amount: a });
+      }
+      Store.putEntry(e); if (!editing) touchClient(c.id);
+      $("#sheet").innerHTML = ""; sheetClose = null; render();
+      toast(editing ? "Cambios guardados" : D.kind === "time" ? `Apuntado ${dur(e.mins)} en ${c.name}` : "Guardado");
+    };
+  };
+  openSheet(draw(), mount);
+}
+
+/* hoja: ficha de cliente */
+function openClientSheet(id) {
+  const c = clientsById()[id]; if (!c) return;
+  const save = () => Store.saveSettings();
+  const draw = () => {
+    const st = S.settings, hasEntries = entriesList().some(e => e.clientId === id);
+    let h = `${sheetHead("Cliente")}
+    <div class="fields">
+      <div class="inline"><input id="cEmoji" value="${esc(c.emoji)}" aria-label="Emoji" style="width:64px;flex:none;text-align:center;font-size:22px;padding:6px"><input id="cName" value="${esc(c.name)}" aria-label="Nombre" autocomplete="off"></div>
+      <div class="f"><span>Color</span><div class="swatches">${COLORS.map(col => `<button class="sw" style="--c:${col}" data-col="${col}" aria-label="Color ${col}" aria-pressed="${c.color === col}"></button>`).join("")}</div></div>
+      <div class="f"><span>Tipo</span><div class="seg" role="group">${[["paid", "De pago"], ["own", "Propio"], ["internal", "Interno"]].map(([k, l]) => `<button data-kind="${k}" aria-pressed="${c.kind === k}">${l}</button>`).join("")}</div>
+        <span class="small muted" style="font-weight:400">${c.kind === "own" ? "Un negocio tuyo: cuenta tiempo, pero no tiene tarifa." : c.kind === "internal" ? "Tiempo que no cobras a nadie: administración, formación…" : "Un cliente que te paga."}</span></div>
+      ${c.kind !== "internal" ? `<label class="f" for="cLine"><span>Línea de negocio</span><select id="cLine"><option value="">Sin línea</option>${st.lines.map(l => `<option ${c.line === l ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}`;
+    if (c.kind === "paid") {
+      const b = c.billing || "hourly";
+      h += `<div class="f"><span>Cómo te paga</span><div class="seg" role="group">${[["hourly", "Por horas"], ["retainer", "Iguala"], ["piece", "Por pieza"], ["fixed", "Precio cerrado"]].map(([k, l]) => `<button data-bill="${k}" aria-pressed="${b === k}">${l}</button>`).join("")}</div></div>`;
+      if (b === "hourly") {
+        h += `<label class="f" for="cRate"><span>Tarifa base</span><div class="inline"><input id="cRate" inputmode="decimal" value="${esc(c.rate ?? "")}" placeholder="40"><span class="muted">€/h</span></div></label>
+          <details><summary class="small" style="cursor:pointer;font-weight:600">Tarifa distinta por tipo de tarea</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">${st.tasks.map(t => `<label class="inline small" style="gap:10px"><span style="flex:1">${esc(t)}</span><input data-tr="${esc(t)}" inputmode="decimal" value="${esc((c.taskRates || {})[t] ?? "")}" placeholder="${esc(c.rate || "base")}" style="max-width:110px"><span class="muted">€/h</span></label>`).join("")}</div></details>`;
+      } else if (b === "retainer") {
+        h += `<div class="grid2"><label class="f" for="cFee"><span>Cuota</span><div class="inline"><input id="cFee" inputmode="decimal" value="${esc(c.fee ?? "")}" placeholder="450"><span class="muted">€/mes</span></div></label>
+          <label class="f" for="cInc"><span>Horas incluidas</span><div class="inline"><input id="cInc" inputmode="decimal" value="${esc(c.includedHours ?? "")}" placeholder="20"><span class="muted">h</span></div></label></div>`;
+      } else if (b === "piece") {
+        h += `<div class="f"><span>Precios por pieza</span><div style="display:flex;flex-direction:column;gap:8px">${(c.pieces || []).map((p, i) => `<div class="inline"><input data-pn="${i}" value="${esc(p.name)}" aria-label="Pieza"><input data-pp="${i}" inputmode="decimal" value="${esc(p.price ?? "")}" aria-label="Precio" style="max-width:100px"><span class="muted">€</span><button class="btn ghost sm" data-pdel="${i}" aria-label="Quitar pieza">✕</button></div>`).join("")}
+          <button class="btn sm" data-padd="1" style="align-self:flex-start">+ Añadir pieza</button></div></div>`;
+      } else {
+        h += `<label class="f" for="cTot"><span>Importe total del encargo</span><div class="inline"><input id="cTot" inputmode="decimal" value="${esc(c.total ?? "")}" placeholder="800"><span class="muted">€</span></div></label>
+          <p class="small muted">Archívalo al terminar y en Informes verás cuánto te salió la hora.</p>`;
+      }
+    }
+    h += `<label class="f" for="cKw"><span>Palabras para el calendario <span class="muted">separadas por comas</span></span><input id="cKw" value="${esc(c.keywords || "")}" placeholder="${esc(c.name)}" autocomplete="off"></label>
+      <label class="f" for="cNote"><span>Nota</span><input id="cNote" value="${esc(c.note || "")}" placeholder="Entrega los viernes" autocomplete="off"></label></div>
+      <div class="btns" style="justify-content:space-between"><button class="btn" data-arch="1">${c.archived ? "Recuperar" : "Archivar"}</button>
+      ${hasEntries ? "" : `<button class="btn danger" data-cdel="1">Borrar cliente</button>`}</div>`;
+    return h;
+  };
+  const mount = el => {
+    const redraw = () => { el.innerHTML = draw(); };
+    el.addEventListener("click", ev => {
+      const b = ev.target.closest("button"); if (!b) return;
+      if (b.dataset.col) { c.color = b.dataset.col; save(); redraw(); }
+      else if (b.dataset.kind) { c.kind = b.dataset.kind; save(); redraw(); }
+      else if (b.dataset.bill) { c.billing = b.dataset.bill; save(); redraw(); }
+      else if (b.dataset.padd) { c.pieces = c.pieces || []; c.pieces.push({ name: c.pieces.length ? "Pieza" : "Reel", price: "" }); save(); redraw(); }
+      else if (b.dataset.pdel) { c.pieces.splice(+b.dataset.pdel, 1); save(); redraw(); }
+      else if (b.dataset.arch) { c.archived = !c.archived; save(); closeSheet(); toast(c.archived ? `${c.name} archivado` : `${c.name} recuperado`); }
+      else if (b.dataset.cdel) {
+        S.settings.clients = S.settings.clients.filter(x => x.id !== id); Store.saveSettings(true);
+        $("#sheet").innerHTML = ""; sheetClose = null; render();
+        toast(`${c.name} borrado`, "Deshacer", () => { S.settings.clients.push(c); Store.saveSettings(true); render(); });
+      }
+    });
+    el.addEventListener("input", ev => {
+      const t = ev.target;
+      if (t.id === "cName") c.name = t.value.trim() || c.name;
+      else if (t.id === "cEmoji") c.emoji = [...t.value.trim()].slice(0, 2).join("") || c.emoji;
+      else if (t.id === "cRate") c.rate = t.value;
+      else if (t.id === "cFee") c.fee = t.value;
+      else if (t.id === "cInc") c.includedHours = t.value;
+      else if (t.id === "cTot") c.total = t.value;
+      else if (t.id === "cKw") c.keywords = t.value;
+      else if (t.id === "cNote") c.note = t.value;
+      else if (t.dataset.tr != null) { c.taskRates = c.taskRates || {}; if (t.value === "") delete c.taskRates[t.dataset.tr]; else c.taskRates[t.dataset.tr] = t.value; }
+      else if (t.dataset.pn != null) c.pieces[+t.dataset.pn].name = t.value;
+      else if (t.dataset.pp != null) c.pieces[+t.dataset.pp].price = t.value;
+      else return;
+      save();
+    });
+    el.addEventListener("change", ev => { if (ev.target.id === "cLine") { c.line = ev.target.value; save(); } });
+  };
+  openSheet(draw(), mount, () => Store.saveSettings(true));
+}
+
+/* ============ calendario ============ */
+async function scanCalendar() {
+  const mcp = S.caps.mcp; if (!mcp) return;
+  S.cal = { busy: true, list: null, err: "" }; render();
+  try {
+    const now = new Date(), from = addDays(now, -7);
+    const iso = d => `${dkey(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+    const res = await mcp.callTool("Google Calendar", "list_events", { startTime: iso(from), endTime: iso(now), orderBy: "startTime", pageSize: 250 });
+    const p = res && (res.payload || res.structuredContent) || {};
+    const events = Array.isArray(p.events) ? p.events : [];
+    const used = new Set(entriesList().map(e => e.calId).filter(Boolean));
+    const seen = new Set(S.settings.calSeen);
+    const cls = S.settings.clients.filter(c => !c.archived && c.kind !== "internal").map(c => ({ c, keys: [c.name, ...String(c.keywords || "").split(",")].map(norm).map(s => s.trim()).filter(s => s.length >= 3) }));
+    const list = [];
+    for (const ev of events) {
+      if (!ev || !ev.id || !ev.start || !ev.start.dateTime || !ev.end || !ev.end.dateTime || ev.status === "cancelled") continue;
+      if (used.has(ev.id) || seen.has(ev.id)) continue;
+      const s = new Date(ev.start.dateTime), e = new Date(ev.end.dateTime), mins = (e - s) / 60000;
+      if (!(mins > 0) || mins > 16 * 60) continue;
+      const sum = norm(ev.summary || "");
+      const hit = cls.find(x => x.keys.some(k => sum.includes(k)));
+      if (!hit) continue;
+      list.push({ id: ev.id, summary: ev.summary || "(sin título)", clientId: hit.c.id, date: dkey(s), start: s.getTime(), mins });
+    }
+    S.cal = { busy: false, list, err: "" };
+  } catch (err) {
+    const code = err && err.code;
+    S.cal = { busy: false, list: null, err: code === "not_granted" || code === "denied" ? "No has dado permiso para leer el calendario." : code === "server_not_connected" ? "Google Calendar no está conectado en tu cuenta de Claude." : "No se pudo leer el calendario. Inténtalo de nuevo en un rato." };
+  }
+  render();
+}
+function calDecide(i, ok) {
+  const s = S.cal.list && S.cal.list[i]; if (!s) return;
+  if (ok) {
+    const c = clientsById()[s.clientId];
+    Store.putEntry({ id: uid(), kind: "time", clientId: s.clientId, date: s.date, start: s.start, mins: s.mins, task: null, note: s.summary, km: 0, billable: !!c && c.kind === "paid", src: "calendar", calId: s.id, ts: Date.now() });
+  } else {
+    S.settings.calSeen = [...S.settings.calSeen, s.id].slice(-300); Store.saveSettings();
+  }
+  S.cal.list.splice(i, 1);
+  if (!S.cal.list.length) S.cal.list = null;
+  render();
+}
+
+/* ============ Claude (sample) ============ */
+function reportData() {
+  const [f, t] = periodBounds(); const C = calc(f, t), cl = clientsById(), st = S.settings;
+  return {
+    periodo: periodLabel(f, t), desde: f, hasta: t,
+    totales: { horas: +(C.T.mins / 60).toFixed(1), horasFacturables: +(C.T.bill / 60).toFixed(1), ingresosSinIVA: Math.round(C.T.rev), costes: Math.round(C.T.cost), eurHoraReal: C.T.eurH == null ? null : Math.round(C.T.eurH) },
+    objetivos: { horasSemana: num(st.goals.weekHours), ingresosMes: num(st.goals.monthIncome), eurHoraMinimo: num(st.minRate) },
+    clientes: C.rows.map(p => { const c = cl[p.id]; return { nombre: c.name, tipo: c.kind === "paid" ? "de pago" : c.kind === "own" ? "negocio propio" : "interno", cobro: c.kind === "paid" ? billingSummary(c) : null, linea: c.line || null, horas: +(p.mins / 60).toFixed(1), ingresos: Math.round(p.rev), costes: Math.round(p.cost), eurHora: p.eurH == null ? null : Math.round(p.eurH), vampiro: p.vampire, faltaTarifa: p.noRate || needsRate(c) }; }),
+    horasPorTarea: Object.fromEntries(Object.entries(C.tasks).map(([k, v]) => [k, +(v / 60).toFixed(1)])),
+    horasPorLinea: Object.fromEntries(Object.entries(C.lines).map(([k, v]) => [k, +(v.mins / 60).toFixed(1)]))
+  };
+}
+async function askClaude(question) {
+  const sample = S.caps.sample; if (!sample || S.ai.busy) return;
+  S.ai = { q: question || S.ai.q, text: "", busy: true, err: "" }; render();
+  const prompt = `Eres un asesor de negocio para un profesional autónomo creativo (fotografía, vídeo, redes sociales). Analizas su control de horas. Responde en español de España, con frases cortas y claras, sin rodeos, en un máximo de 170 palabras. Usa una lista de 3 a 5 puntos concretos y accionables con cifras de los datos. Los importes son sin IVA. No inventes datos que no estén abajo.
+
+Datos del periodo (JSON):
+${JSON.stringify(reportData())}
+
+${question ? `Pregunta: ${question}` : "Tarea: resume cómo ha ido el periodo y qué debería cambiar (precios, clientes que no compensan, reparto del tiempo)."}`;
+  try {
+    const res = await sample(prompt, { onText: ({ text }) => { S.ai.text = text; const o = $("#aiOut"); if (o) o.innerHTML = aiHtml(text); } });
+    S.ai.text = res.text;
+  } catch (err) {
+    const code = err && err.code;
+    S.ai.err = code === "not_granted" ? "No has dado permiso para preguntar a Claude desde esta página." : code === "rate_limited" ? "Demasiadas preguntas seguidas. Espera un poco y vuelve a probar." : "No se pudo obtener respuesta. Inténtalo de nuevo.";
+    if (err && err.text) S.ai.text = err.text;
+  }
+  S.ai.busy = false; render();
+}
+
+/* ============ archivos ============ */
+async function saveFile(filename, data, type) {
+  if (S.caps.downloads) {
+    try { await S.caps.downloads.save({ filename, data: new Blob([data], { type }) }); return; }
+    catch (err) { if (err && (err.code === "dismissed" || err.code === "denied" || err.code === "cancelled")) return; }
+  }
+  try {
+    const url = URL.createObjectURL(new Blob([data], { type }));
+    const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch { toast("No se pudo descargar el archivo."); }
+}
+function exportCsv() {
+  const [f, t] = periodBounds(), cl = clientsById();
+  const n2 = v => String(Math.round(v * 100) / 100).replace(".", ",");
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = [["Fecha", "Cliente", "Línea", "Tipo", "Tarea", "Horas", "Minutos", "Km", "Pieza", "Cantidad", "Precio pieza", "Gasto", "Facturable", "Descripción"]];
+  entriesList().filter(e => e.date >= f && e.date <= t).sort((a, b) => a.date.localeCompare(b.date) || (a.start || 0) - (b.start || 0)).forEach(e => {
+    const c = cl[e.clientId] || { name: "?" }, k = e.kind || "time";
+    rows.push([e.date, c.name, c.line || "", k === "time" ? "Tiempo" : k === "piece" ? "Pieza" : "Gasto", e.task || "", k === "time" ? n2(e.mins / 60) : "", k === "time" ? Math.round(e.mins) : "", e.km ? n2(e.km) : "", e.piece || "", e.qty || "", e.price != null && k === "piece" ? n2(e.price) : "", e.amount ? n2(e.amount) : "", k === "time" ? (e.billable ? "Sí" : "No") : "", e.note || ""]);
+  });
+  saveFile(`bitacora_${f}_${t}.csv`, "﻿" + rows.map(r => r.map(q).join(";")).join("\r\n"), "text/csv;charset=utf-8");
+}
+function backup() {
+  const data = JSON.stringify({ app: "bitacora", v: 1, exportedAt: new Date().toISOString(), settings: S.settings, entries: S.entries }, null, 1);
+  saveFile(`bitacora_copia_${todayKey()}.json`, data, "application/json");
+}
+async function replaceAll(settings, entries) {
+  const old = Object.keys(S.entries);
+  S.settings = mergeSettings(settings); Store.saveSettings(true);
+  for (const id of old) if (!entries[id]) await Store.delEntry(id);
+  for (const e of Object.values(entries)) await Store.putEntry(e);
+  render();
+}
+
+/* ============ datos de ejemplo ============ */
+async function loadDemo() {
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const now = Date.now(), st = S.settings;
+  const mk = (name, emoji, color, line, kind, extra = {}) => Object.assign({ id: "demo-" + uid(), demo: true, name, emoji, color, line, kind, billing: "hourly", rate: "", taskRates: {}, fee: "", includedHours: "", pieces: [], total: "", keywords: "", note: "", archived: false, createdAt: now - 60 * 864e5, lastUsed: now - rnd() * 1e6 }, extra);
+  const cs = [
+    mk("Estudio Lumen", "📷", COLORS[0], "Fotografía", "paid", { rate: "40", taskRates: { "Retoque": "30" }, keywords: "lumen" }),
+    mk("Café Brisa", "☕", COLORS[1], "Redes sociales", "paid", { billing: "retainer", fee: "450", includedHours: "16", keywords: "brisa" }),
+    mk("Inmobiliaria Norte", "🏠", COLORS[2], "Vídeo", "paid", { billing: "piece", pieces: [{ name: "Reel", price: "150" }, { name: "Sesión de fotos", price: "220" }] }),
+    mk("Web Taller Alba", "🎨", COLORS[4], "Diseño", "paid", { billing: "fixed", total: "900" }),
+    mk("Mi tienda online", "🛍️", COLORS[3], "Otros", "own", { billing: "hourly" })
+  ];
+  if (!st.clients.some(c => c.kind === "internal")) cs.push(mk("Interno", "🗂️", "#8e8e93", "", "internal"));
+  st.clients.push(...cs); Store.saveSettings(true);
+  const tasksBy = [["Sesión de fotos", "Retoque", "Reunión", "Desplazamiento"], ["Guion", "Grabación", "Edición", "Publicación", "Comunidad"], ["Grabación", "Edición", "Desplazamiento"], ["Reunión", "Edición"], ["Publicación", "Edición"], ["Administración"]];
+  const entries = [];
+  for (let i = 27; i >= 1; i--) {
+    const d = addDays(new Date(), -i), k = dkey(d), wd = d.getDay();
+    if (wd === 0 && rnd() < .8) continue;
+    const n = wd === 6 ? 1 : 2 + Math.floor(rnd() * 2);
+    for (let j = 0; j < n; j++) {
+      const ci = [0, 1, 2, 1, 3, 0, 2, 4, 1, 5, 2, 0][(i * 5 + j * 7 + Math.floor(rnd() * 3)) % 12], c = cs[ci] || cs[0], tl = tasksBy[ci] || ["Administración"];
+      const task = tl[Math.floor(rnd() * tl.length)];
+      const mins = Math.round((30 + rnd() * 180) / 5) * 5;
+      entries.push({ id: "demo-" + uid(), demo: true, kind: "time", clientId: c.id, date: k, start: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9 + j * 3).getTime(), mins, task, note: "", km: task === "Desplazamiento" ? Math.round(10 + rnd() * 40) : 0, billable: c.kind === "paid", src: "demo", ts: now });
+    }
+    if (rnd() < .18) entries.push({ id: "demo-" + uid(), demo: true, kind: "piece", clientId: cs[2].id, date: k, piece: "Reel", qty: 1, price: 150, note: "", ts: now });
+  }
+  entries.push({ id: "demo-" + uid(), demo: true, kind: "expense", clientId: cs[0].id, date: dkey(addDays(new Date(), -6)), amount: 45, note: "Alquiler de flashes", ts: now });
+  entries.push({ id: "demo-" + uid(), demo: true, kind: "time", clientId: cs[0].id, date: todayKey(), start: now - 2 * 3600e3, mins: 85, task: "Retoque", note: "Selección y revelado", km: 0, billable: true, src: "demo", ts: now });
+  render(); toast("Cargando datos de ejemplo…");
+  for (const e of entries) await Store.putEntry(e);
+  render(); toast("Datos de ejemplo cargados. Bórralos cuando quieras.");
+}
+async function clearDemo() {
+  const ids = S.settings.clients.filter(c => c.demo).map(c => c.id);
+  if (S.timer && ids.includes(S.timer.clientId)) { S.timer = null; Store.saveTimer(); }
+  S.settings.clients = S.settings.clients.filter(c => !c.demo); Store.saveSettings(true);
+  render();
+  for (const e of entriesList().filter(e => e.demo)) await Store.delEntry(e.id);
+  render(); toast("Datos de ejemplo borrados");
+}
+
+/* ============ eventos ============ */
+const ACT = {
+  nav: b => { location.hash = b.dataset.v; },
+  start: b => { if (lp.fired) { lp.fired = false; return; } startClient(b.dataset.id); },
+  pause: pauseTimer, resume: resumeTimer, stop: () => stopTimer(),
+  pickTask: openTaskPicker, manual: () => openEntrySheet(),
+  editEntry: b => openEntrySheet({ id: b.dataset.id }),
+  gap: b => openEntrySheet({ date: b.dataset.d }),
+  holidayGaps: () => { S.settings.holidays = [...new Set([...S.settings.holidays, ...gaps()])]; Store.saveSettings(); render(); toast("Marcados como días libres"); },
+  ackForgot: () => { if (S.timer) { S.timer.ackAt = Date.now(); Store.saveTimer(); render(); } },
+  stoppedEarlier: openStoppedEarlier,
+  dismiss: b => { S.dismissed[b.dataset.k] = 1; render(); },
+  scanCal: scanCalendar, calOk: b => calDecide(+b.dataset.i, true), calNo: b => calDecide(+b.dataset.i, false), calClose: () => { S.cal.list = null; render(); },
+  loadDemo, clearDemo,
+  eye: () => { S.hide = !S.hide; try { localStorage.setItem("bitacora:hide", S.hide ? "1" : "0"); } catch {} render(); },
+  newClient: () => openSheet(`${sheetHead("Cliente nuevo")}<form class="inline" id="qcForm"><input id="qcName" placeholder="Nombre" autocomplete="off" autofocus aria-label="Nombre del cliente"><button class="btn primary" type="submit">Añadir</button></form>`, el => {
+    $("#qcForm", el).onsubmit = ev => { ev.preventDefault(); const c = newClient($("#qcName", el).value); if (c) { $("#sheet").innerHTML = ""; sheetClose = null; render(); toast(`${c.name} añadido`, "Configurar", () => openClientSheet(c.id)); } };
+  }),
+  editClient: b => openClientSheet(b.dataset.id),
+  pomo: b => { S.settings.pomodoro = b.checked; if (S.timer) { S.timer.pomoAnchor = activeMs(S.timer); Store.saveTimer(); } Store.saveSettings(); },
+  per: b => { S.report.mode = b.dataset.m; if (b.dataset.m === "range" && !S.report.from) { const [f, t] = periodBounds({ mode: "month", anchor: S.report.anchor }); S.report.from = f; S.report.to = t; } render(); },
+  prev: () => { const r = S.report, a = r.anchor; r.anchor = r.mode === "week" ? addDays(a, -7) : new Date(a.getFullYear(), a.getMonth() - 1, 1); render(); },
+  next: () => { const r = S.report, a = r.anchor; r.anchor = r.mode === "week" ? addDays(a, 7) : new Date(a.getFullYear(), a.getMonth() + 1, 1); render(); },
+  nowPer: () => { S.report.anchor = new Date(); render(); },
+  billCycle: b => { const k = b.dataset.k, cur = S.settings.billing[k] || "pendiente"; S.settings.billing[k] = BILL[(BILL.indexOf(cur) + 1) % 3]; Store.saveSettings(); render(); },
+  exportCsv, backup,
+  aiRun: () => askClaude(""),
+  importAsk: () => $("#importFile").click(),
+  wipeAsk: () => { $("#wipeBox").innerHTML = `<div class="alert warn"><span class="e">⚠️</span><div class="body"><p>Se borrarán todos tus clientes y registros. No se puede deshacer. ¿Descargas antes una copia?</p><div class="btns"><button class="btn sm" data-act="backup">Descargar copia</button><button class="btn sm danger" data-act="wipeYes">Borrar todo</button><button class="btn sm ghost" data-act="wipeNo">Cancelar</button></div></div></div>`; },
+  wipeNo: () => render(),
+  wipeYes: async () => { S.timer = null; Store.saveTimer(); await replaceAll(DEFAULTS(), {}); toast("Datos borrados"); },
+  delTask: b => { S.settings.tasks.splice(+b.dataset.i, 1); Store.saveSettings(); render(); },
+  delLine: b => { S.settings.lines.splice(+b.dataset.i, 1); Store.saveSettings(); render(); },
+  workPreset: b => { S.settings.workDays = b.dataset.days.split(",").map(Number); Store.saveSettings(); render(); },
+  workDay: b => {
+    const d = +b.dataset.d, w = S.settings.workDays;
+    if (w.includes(d)) { if (w.length === 1) return toast("Tienes que trabajar al menos un día."); S.settings.workDays = w.filter(x => x !== d); }
+    else S.settings.workDays = [...w, d].sort();
+    Store.saveSettings(); render();
+  },
+  delHoliday: b => { S.settings.holidays = S.settings.holidays.filter(d => d !== b.dataset.d); Store.saveSettings(); render(); },
+  closeSheet: () => closeSheet()
+};
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  if (b.type === "checkbox") return;
+  const fn = ACT[b.dataset.act]; if (fn) { e.preventDefault(); fn(b, e); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.matches("input[type=checkbox][data-act]")) { const fn = ACT[t.dataset.act]; if (fn) fn(t, e); return; }
+  if (t.dataset.set) {
+    const path = t.dataset.set.split("."), st = S.settings;
+    const val = t.type === "checkbox" ? t.checked : num(t.value);
+    if (t.type !== "checkbox" && val == null && path[0] !== "goals") return;
+    if (path.length === 2) st[path[0]][path[1]] = val ?? 0; else st[path[0]] = val;
+    Store.saveSettings(); toast("Guardado");
+  }
+  if (t.id === "rFrom" || t.id === "rTo") { S.report.from = $("#rFrom").value || S.report.from; S.report.to = $("#rTo").value || S.report.to; render(); }
+});
+document.addEventListener("input", e => { if (e.target.id === "aiQ") S.ai.q = e.target.value; });
+document.addEventListener("submit", e => {
+  const f = e.target; e.preventDefault();
+  if (f.id === "obForm" || f.id === "ncForm") { const inp = f.querySelector("input"); const c = newClient(inp.value); if (c) { inp.value = ""; render(); toast(`${c.name} añadido`, "Configurar", () => openClientSheet(c.id)); } }
+  if (f.id === "taskForm") { const v = $("#taskNew").value.trim(); if (v && !S.settings.tasks.includes(v)) { S.settings.tasks.push(v); Store.saveSettings(); render(); } }
+  if (f.id === "lineForm") { const v = $("#lineNew").value.trim(); if (v && !S.settings.lines.includes(v)) { S.settings.lines.push(v); Store.saveSettings(); render(); } }
+  if (f.id === "holForm") {
+    const a = $("#holNew").value, b = $("#holTo").value || a; if (!a) return;
+    const set = new Set(S.settings.holidays); let n = 0;
+    for (let d = parseD(a < b ? a : b); dkey(d) <= (a < b ? b : a) && n < 120; d = addDays(d, 1), n++) set.add(dkey(d));
+    S.settings.holidays = [...set].sort(); Store.saveSettings(); render();
+  }
+  if (f.id === "aiForm") { const q = $("#aiQ").value.trim(); if (q) askClaude(q); }
+});
+$("#importFile").addEventListener("change", async e => {
+  const file = e.target.files && e.target.files[0]; e.target.value = ""; if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== "bitacora" || !d.settings || typeof d.entries !== "object") throw 0;
+    const n = Object.keys(d.entries).length;
+    openSheet(`${sheetHead("Restaurar copia")}<p>La copia tiene ${d.settings.clients.length} clientes y ${n} registros. Sustituirá todo lo que tienes ahora.</p>
+      <div class="btns"><button class="btn primary" id="impOk">Restaurar</button></div>`, el => {
+      $("#impOk", el).onclick = async () => { $("#sheet").innerHTML = ""; sheetClose = null; toast("Restaurando…"); await replaceAll(d.settings, d.entries); toast("Copia restaurada"); };
+    });
+  } catch { toast("Ese archivo no es una copia de Bitácora."); }
+});
+
+/* pulsación larga = +15 min */
+const lp = { t: null, fired: false, x: 0, y: 0 };
+document.addEventListener("pointerdown", e => {
+  const b = e.target.closest(".cbtn[data-id]"); if (!b || e.button > 0) return;
+  lp.fired = false; lp.x = e.clientX; lp.y = e.clientY; clearTimeout(lp.t);
+  lp.t = setTimeout(() => { lp.fired = true; add15(b.dataset.id); }, 550);
+});
+const lpCancel = e => { if (e && e.type === "pointermove" && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) < 10) return; clearTimeout(lp.t); };
+["pointerup", "pointercancel", "pointerleave", "pointermove"].forEach(ev => document.addEventListener(ev, lpCancel, { passive: true }));
+document.addEventListener("contextmenu", e => { if (e.target.closest(".cbtn")) e.preventDefault(); });
+
+/* teclado */
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && sheetOpen()) { closeSheet(); return; }
+  const tg = e.target; if (sheetOpen() || e.metaKey || e.ctrlKey || e.altKey || (tg && (tg.matches("input,textarea,select") || tg.isContentEditable))) return;
+  if (e.key === " " && S.view === "hoy") {
+    e.preventDefault();
+    if (S.timer) stopTimer(); else { const c = activeClients()[0]; if (c) startClient(c.id); }
+  } else if (/^[1-9]$/.test(e.key) && S.view === "hoy") {
+    const c = activeClients()[+e.key - 1]; if (c) startClient(c.id);
+  } else if (e.key === "n" || e.key === "N") { e.preventDefault(); openEntrySheet(); }
+});
+
+/* rutas */
+function route() {
+  const h = location.hash.replace("#", "");
+  S.view = VIEWS.some(([k]) => k === h) ? h : "hoy";
+  if (sheetOpen()) { $("#sheet").innerHTML = ""; sheetClose = null; }
+  render(); window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", route);
+
+/* ============ reloj ============ */
+let lastAlertCheck = 0;
+function tick(fromRender) {
+  const t = S.timer, now = Date.now();
+  const c = t && clientsById()[t.clientId];
+  const a = activeMs(t, now);
+  $$("[data-clock]").forEach(el => { el.textContent = clockStr(a); });
+  document.title = t && c ? `${t.pausedAt ? "❚❚" : "▶"} ${clockStr(a).replace(/:\d\d$/, "")} · ${c.name}` : "Bitácora";
+  const wb = $("[data-weekbill]");
+  if (wb && t && c && c.kind === "paid" && !fromRender) {
+    const base = +wb.dataset.weekbill + a / 60000, goal = (num(S.settings.goals.weekHours) || 0) * 60;
+    wb.firstChild.textContent = durShort(base);
+    const m = wb.parentElement.querySelector(".meter > i"); if (m && goal) m.style.width = clamp(base / goal * 100, 0, 100) + "%";
+  }
+  const pomo = $("[data-pomo]");
+  if (t && S.settings.pomodoro) {
+    const work = (num(S.settings.pomoWork) || 25) * 60000, brk = (num(S.settings.pomoBreak) || 5) * 60000;
+    if (!t.pausedAt && a - (t.pomoAnchor || 0) >= work) {
+      t.pausedAt = now; t.breakUntil = now + brk; Store.saveTimer(); sound("bell");
+      toast(`🍅 Pomodoro completo. Descansa ${Math.round(brk / 60000)} min.`); if (!fromRender) render(); return;
+    }
+    if (t.breakUntil && now >= t.breakUntil) {
+      t.breakUntil = null; Store.saveTimer(); sound("bell"); toast("Fin del descanso", "Reanudar", resumeTimer); if (!fromRender) render(); return;
+    }
+    if (pomo) pomo.textContent = t.breakUntil ? `☕ Descanso · ${clockStr(t.breakUntil - now).slice(2)}` : t.pausedAt ? "" : `🍅 ${clockStr(work - (a - (t.pomoAnchor || 0))).slice(2)}`;
+  } else if (pomo) pomo.textContent = "";
+  if (!fromRender && t && !t.pausedAt && now - lastAlertCheck > 60000) { lastAlertCheck = now; if (S.view === "hoy" && !sheetOpen() && a > (num(S.settings.forgotHours) || 2) * 3600e3 && !$(".alert.warn")) render(); }
+}
+setInterval(() => tick(false), 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+
+/* ============ arranque ============ */
+async function boot() {
+  const cache = Local.load();
+  if (cache) { S.settings = mergeSettings(cache.settings); S.timer = cache.timer || null; S.entries = cache.entries || {}; }
+  route();
+  const cl = window.claude;
+  if (!cl || typeof cl.use !== "function") { S.mode = "local"; render(); return; }
+  const safe = p => Promise.resolve(p).catch(() => null);
+  const [db, user] = await Promise.all([safe(cl.use("db")), safe(cl.use("user"))]);
+  const id = user ? await safe(user.id()) : null;
+  if (db && id) {
+    if (cache && cache.mode === "local") { /* se migra al recibir la nube vacía */ }
+    S.mode = "cloud"; Cloud.init(db, id);
+  } else { S.mode = "local"; }
+  render();
+  const [sample, mcp, downloads] = await Promise.all([safe(cl.use("sample")), safe(cl.use("mcp")), safe(cl.use("downloads"))]);
+  S.caps = { db, sample, mcp, downloads };
+  render();
+}
+boot();
+})();
+</script>
+
+</body>
+</html>
