@@ -115,7 +115,7 @@ Bitácora ordena a los clientes del más rentable al menos rentable y los etique
 Aparecen arriba en la pantalla *Hoy*, solo cuando hacen falta:
 
 - 🗓️ **Días en blanco:** días de trabajo de la última semana sin nada apuntado. Un toque los abre para rellenarlos, y otro los marca como libres.
-- ⏰ **Cronómetro olvidado:** lleva encendido más de 2 h (configurable). Puedes seguir o decir a qué hora paraste de verdad.
+- ⏰ **Cronómetro olvidado:** lleva encendido más de 2 h (configurable). Puedes seguir o decir a qué hora paraste de verdad, y si lo paras sin más te pide la duración real antes de guardarlo.
 - ⚠️ **Sobrecarga:** hoy llevas más de 9 h (configurable).
 - 📦 **Iguala superada:** un cliente ya ha usado más horas de las incluidas este mes.
 - 💶 **Falta tarifa:** hay clientes sin precio.
@@ -221,7 +221,7 @@ No, a propósito. Te da el resumen del mes por cliente y el estado de cobro, y l
 Solo si los tienes marcados como día de trabajo. En *Ajustes → Días de trabajo* eliges 5, 6 o 7 días, y cuáles.
 
 **¿Qué pasa si me olvido el cronómetro encendido toda la noche?**
-Al volver a abrirla te pregunta si sigues con ello. Si no, le dices a qué hora paraste y guarda solo ese tiempo.
+Al volver a abrirla te pregunta si sigues con ello. Si no, le dices a qué hora paraste y guarda solo ese tiempo. Si lo paras sin más, Bitácora ve que ha estado encendido más de la cuenta y te abre el registro para que pongas la duración real. Y si se te pasó, en **Hoy → Días anteriores** puedes corregir o borrar cualquier registro de las últimas dos semanas.
 
 **¿Sirve para equipos?**
 No. Está pensada para una persona que trabaja con varios clientes.
