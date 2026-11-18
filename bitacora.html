@@ -558,7 +558,8 @@ async function startClient(id) {
     if (S.timer.clientId === id) { if (S.timer.pausedAt) resumeTimer(); return; }
     const prev = clientsById()[S.timer.clientId];
     const e = stopCore();
-    if (e) toast(`Guardado ${dur(e.mins)} en ${prev ? prev.name : "el cliente anterior"}`, "Editar", () => openEntrySheet({ id: e.id }));
+    if (e && e.mins > (num(S.settings.forgotHours) || 2) * 60) { setTimeout(() => { openEntrySheet({ id: e.id }); toast(`${prev ? prev.name : "El cliente anterior"} estuvo ${dur(e.mins)} encendido. Corrige la duración si se te olvidó parar.`); }, 0); }
+    else if (e) toast(`Guardado ${dur(e.mins)} en ${prev ? prev.name : "el cliente anterior"}`, "Editar", () => openEntrySheet({ id: e.id }));
   }
   const now = Date.now();
   S.timer = { clientId: id, task: null, note: "", startedAt: now, pausedAt: null, pausedMs: 0, pomoAnchor: 0, breakUntil: null, ackAt: null };
@@ -580,7 +581,11 @@ function stopCore(endAt) {
 }
 function stopTimer(endAt) {
   const e = stopCore(endAt); sound("stop"); render();
-  if (e) openStopSheet(e.id);
+  if (!e) return;
+  if (!endAt && e.mins > (num(S.settings.forgotHours) || 2) * 60) {
+    openEntrySheet({ id: e.id });
+    toast(`Ha estado encendido ${dur(e.mins)}. Corrige la duración si se te olvidó parar.`);
+  } else openStopSheet(e.id);
 }
 function pauseTimer() { if (!S.timer || S.timer.pausedAt) return; S.timer.pausedAt = Date.now(); Store.saveTimer(); render(); }
 function resumeTimer() {
@@ -693,6 +698,19 @@ function viewHoy() {
   const tot = today.filter(e => (e.kind || "time") === "time").reduce((a, e) => a + e.mins, 0);
   h += `<section class="sec"><div class="sec-h"><h2>Registros de hoy</h2><span class="aside num">${tot ? dur(tot) : ""}</span></div>
     ${today.length ? `<div class="list">${today.map(entryRow).join("")}</div>` : `<div class="list"><p class="empty">Todavía no hay nada apuntado hoy.</p></div>`}</section>`;
+
+  const from = dkey(addDays(new Date(), -14)), byDay = {};
+  for (const e of entriesList()) if (e.date < todayKey() && e.date >= from) (byDay[e.date] = byDay[e.date] || []).push(e);
+  const days = Object.keys(byDay).sort().reverse();
+  if (days.length) {
+    const yest = dkey(addDays(new Date(), -1)), fmt = new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    h += `<details class="sec"><summary class="muted" style="cursor:pointer;font-weight:600">Días anteriores · toca un registro para corregirlo</summary>${days.map(k => {
+      const list = byDay[k].sort((a, b) => (b.start || b.ts || 0) - (a.start || a.ts || 0));
+      const m = list.filter(e => (e.kind || "time") === "time").reduce((a, e) => a + e.mins, 0);
+      const lbl = k === yest ? "Ayer" : fmt.format(parseD(k));
+      return `<div class="sec-h" style="margin-top:14px"><h2>${esc(lbl)}</h2><span class="aside num">${m ? dur(m) : ""}</span></div><div class="list">${list.map(entryRow).join("")}</div>`;
+    }).join("")}</details>`;
+  }
   return h;
 }
 function entryRow(e) {
