@@ -1131,9 +1131,12 @@ function openEntrySheet(opts = {}) {
 
 /* hoja: ficha de cliente */
 function openClientSheet(id) {
-  const c = clientsById()[id]; if (!c) return;
+  // La nube puede sustituir S.settings mientras la ficha está abierta: buscar siempre el cliente actual.
+  let c = clientsById()[id]; if (!c) return;
+  const cur = () => (c = clientsById()[id] || c);
   const save = () => Store.saveSettings();
   const draw = () => {
+    cur();
     const st = S.settings, hasEntries = entriesList().some(e => e.clientId === id);
     let h = `${sheetHead("Cliente")}
     <div class="fields">
@@ -1170,6 +1173,7 @@ function openClientSheet(id) {
     const redraw = () => { el.innerHTML = draw(); };
     el.addEventListener("click", ev => {
       const b = ev.target.closest("button"); if (!b) return;
+      cur();
       if (b.dataset.col) { c.color = b.dataset.col; save(); redraw(); }
       else if (b.dataset.kind) { c.kind = b.dataset.kind; save(); redraw(); }
       else if (b.dataset.bill) { c.billing = b.dataset.bill; save(); redraw(); }
@@ -1183,7 +1187,7 @@ function openClientSheet(id) {
       }
     });
     el.addEventListener("input", ev => {
-      const t = ev.target;
+      const t = ev.target; cur();
       if (t.id === "cName") c.name = t.value.trim() || c.name;
       else if (t.id === "cEmoji") c.emoji = [...t.value.trim()].slice(0, 2).join("") || c.emoji;
       else if (t.id === "cRate") c.rate = t.value;
@@ -1198,7 +1202,7 @@ function openClientSheet(id) {
       else return;
       save();
     });
-    el.addEventListener("change", ev => { if (ev.target.id === "cLine") { c.line = ev.target.value; save(); } });
+    el.addEventListener("change", ev => { if (ev.target.id === "cLine") { cur(); c.line = ev.target.value; save(); } });
   };
   openSheet(draw(), mount, () => Store.saveSettings(true));
 }
